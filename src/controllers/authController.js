@@ -27,6 +27,9 @@ const login = async (req, res) => {
     // Compare the user-entered password with the stored hashed password
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
+
+
+    
     if (isPasswordValid) {
       // Password is correct
       // Create a JWT token for session management (customize as needed)
