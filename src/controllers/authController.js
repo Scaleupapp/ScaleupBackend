@@ -4,6 +4,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/userModel');
 
+
 const router = express.Router();
 
 // Login route
@@ -26,9 +27,6 @@ const login = async (req, res) => {
 
     // Compare the user-entered password with the stored hashed password
     const isPasswordValid = await bcrypt.compare(password, user.password);
-
-
-
     
     if (isPasswordValid) {
       // Password is correct

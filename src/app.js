@@ -1,17 +1,19 @@
-// src/app.js
 const express = require('express');
 const mongoose = require('mongoose');
 const app = express();
 const aws = require('aws-sdk');
 const bodyParser = require('body-parser');
-const authRoute = require('./routes/authRoute'); 
+const jwt = require('jsonwebtoken'); // Import JWT module
+const userRoute = require('./routes/userRoute'); // Import userRoute
+const authRoute = require('./routes/authRoute');
+
 const PORT = process.env.PORT || 3000;
 
 // Configure AWS SDK with your credentials
 aws.config.update({
-  accessKeyId: 'AKIA4OBHVFBJPGOAQOMZ',
-  secretAccessKey: 'KcYQmRdwAF0nskBJguP+1L7wRjiRYnZBFJkH9NV6',
-  region: 'ap-southeast-2'
+  accessKeyId: 'AKIA4OBHVFBJP4K3I5MX',
+  secretAccessKey: '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',
+  region: 'ap-southeast-2',
 });
 
 app.use(bodyParser.json());
@@ -31,11 +33,9 @@ mongoose
     console.error('Error connecting to MongoDB: ' + error);
   });
 
-
-  // Define your routes and middleware
-// Use the auth 
-app.use('/api/auth', authRoute); 
-
+// Define your routes and middleware
+app.use('/api/auth', authRoute); // Use the auth route
+app.use('/api/users', userRoute); // Use the user route
 
 // Start the server
 app.listen(PORT, () => {
