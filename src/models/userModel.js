@@ -97,6 +97,8 @@ followersCount: {
   default: 0, // Default count is 0
 },
 
+resume: String,
+
 followingCount: {
   type: Number,
   default: 0, // Default count is 0
