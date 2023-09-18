@@ -9,7 +9,10 @@
   "author": "Nirpeksh",
   "license": "ISC",
   "dependencies": {
+    "aws-sdk": "^2.1459.0",
+    "bcrypt": "^5.1.1",
     "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
     "mongoose": "^7.5.2"
   }
 }

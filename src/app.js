@@ -3,6 +3,8 @@ const express = require('express');
 const mongoose = require('mongoose');
 const app = express();
 const aws = require('aws-sdk');
+const bodyParser = require('body-parser');
+const authRoute = require('./routes/authRoute'); 
 const PORT = process.env.PORT || 3000;
 
 // Configure AWS SDK with your credentials
@@ -29,9 +31,11 @@ mongoose
     console.error('Error connecting to MongoDB: ' + error);
   });
 
-// Define your routes and middleware
-// Example:
-// app.use('/api/users', require('./routes/users'));
+
+  // Define your routes and middleware
+// Use the auth 
+app.use('/api/auth', authRoute); 
+
 
 // Start the server
 app.listen(PORT, () => {
