@@ -9,4 +9,22 @@ const upload = multer({ storage: storage });
 // Create Content route
 router.post('/create', upload.single('media'), contentController.addContent);
 
+// Add a route for listing pending verification content
+router.get('/pending-verification', contentController.listPendingVerificationContent);
+
+// Verify Content route (for SMEs to rate and verify content)
+router.put('/verify/:contentId', contentController.updateContentRatingAndVerification);
+
+// Get Content Details route (for SME review)
+router.get('/details/:contentId', contentController.getContentDetails);
+
+// Add a new route for getting filtered content
+router.get('/all-content', contentController.getAllContent);
+
+// Like a content item
+router.put('/like/:contentId', contentController.likeContent);
+
+// Unlike a content item
+router.put('/unlike/:contentId', contentController.unlikeContent);
+
 module.exports = router;

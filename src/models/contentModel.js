@@ -15,7 +15,11 @@ const contentSchema = new mongoose.Schema({
   // Define fields for uploaded content (e.g., contentURL for storing file paths)
   contentURL: String,
   heading: String,
-  verify: String,
+  verify: {
+    type: String,
+    enum: ['Yes', 'No'], // Enum values for Yes and No
+    default: 'No', // Set default to No
+  },
   relatedTopics: [String],
   // Add a field to link to the user who created the content
   userId: {
@@ -38,23 +42,35 @@ const contentSchema = new mongoose.Schema({
       ref: 'Comment', // Reference the Comment model
     },
   ],
-rating: {
+  rating: {
     type: Number,
     default: 0,
   },
-  smeComments: 
-    {type: String}
-  ,
+
+  likeCount: {
+    type: Number,
+    default: 0, // Default count is 0
+  },
+
+  CommentCount: {
+    type: Number,
+    default: 0, // Default count is 0
+  },
+
+  smeComments: {
+    type: String,
+  },
   smeVerify: {
     type: String,
-    enum: ['NA', 'Pending'], // Enum values for NA and Pending
+    enum: ['NA', 'Pending', 'Accepted', 'Rejected'], // Enum values for NA, Pending, Accepted, and Rejected
     default: function () {
       // Default value based on the existing verify field
-      return this.verify === 'Yes' ? 'Pending' : 'NA';
+      if (this.verify === 'Yes') {
+        return 'Pending';
+      }
+      return 'NA';
     },
   },
-  
-
 });
 
 const Content = mongoose.model('Content', contentSchema);
