@@ -6,6 +6,8 @@ const bodyParser = require('body-parser');
 const jwt = require('jsonwebtoken'); // Import JWT module
 const userRoute = require('./routes/userRoute'); // Import userRoute
 const authRoute = require('./routes/authRoute');
+const contentRoute = require('./routes/contentRoutes');
+const cors = require('cors');
 
 const PORT = process.env.PORT || 3000;
 
@@ -17,6 +19,7 @@ aws.config.update({
 });
 
 app.use(bodyParser.json());
+app.use(cors());
 
 app.set('view engine', 'ejs');
 
@@ -36,6 +39,7 @@ mongoose
 // Define your routes and middleware
 app.use('/api/auth', authRoute); // Use the auth route
 app.use('/api/users', userRoute); // Use the user route
+app.use('/api/content', contentRoute);
 
 // Start the server
 app.listen(PORT, () => {
