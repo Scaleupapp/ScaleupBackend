@@ -1,4 +1,5 @@
 const User = require('../models/userModel');
+const mongoose = require('mongoose');
 const Content = require('../models/contentModel');
 const jwt = require('jsonwebtoken');
 
@@ -57,69 +58,209 @@ exports.searchUsers = async (req, res) => {
 };
 
 // Controller function to get detailed information about a specific user
+// Controller function to get detailed information about a specific user
 exports.getUserDetails = async (req, res) => {
     try {
-      // Get the user's unique identifier from the request parameters
-      const { userId } = req.params;
+        // Get the user's unique identifier from the request parameters
+        const { userId } = req.params;
+
+        // Fetch the user's details
+        const user = await User.findById(userId).select(
+            'profilePicture username firstname lastname email phoneNumber bio.bioInterests education workExperience courses certifications badges dateOfBirth location bio.bioAbout followers following followersCount followingCount role'
+        );
+
+        // Check if the user was not found
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Fetch the user's associated content, populating both 'likes' and 'comments'
+        const userContent = await Content.find({ userId }).select(
+            'heading captions contentURL hashtags relatedTopics postdate likes comments smeVerify'
+        )
+        .populate('likes', 'username')
+        .populate({
+            path: 'comments',
+            select: 'commentText username commentDate', // Adjust the fields you want to select
+        });
+
+        const totalPosts = await Content.countDocuments({ userId: user._id });
+
+        // Format the user details
+        const formattedUser = {
+            profilePicture: user.profilePicture,
+            userId: user._id,
+            username: user.username,
+            firstname: user.firstname,
+            lastname: user.lastname,
+            email: user.email,
+            phoneNumber: user.phoneNumber,
+            role: user.role === 'Subject Matter Expert' ? 'SME' : '',
+            totalPosts,
+            bioInterests: user.bio.bioInterests,
+            education: user.education,
+            workExperience: user.workExperience,
+            courses: user.courses,
+            certifications: user.certifications,
+            badges: user.badges,
+            dateOfBirth: user.dateOfBirth,
+            location: user.location,
+            bioAbout: user.bio.bioAbout,
+            followersCount: user.followersCount,
+            followers: user.followers,
+            followingCount: user.followingCount,
+            following: user.following,
+            content: userContent.map(content => ({
+                heading: content.heading,
+                captions: content.captions,
+                contentURL: content.contentURL,
+                hashtags: content.hashtags,
+                relatedTopics: content.relatedTopics,
+                postdate: content.postdate,
+                likes: {
+                    count: content.likes.length,
+                    users: content.likes.map(like => like.username),
+                },
+                smeVerify: content.smeVerify === 'Accepted' ? true : false,
+                contentId: content._id,
+                comments: content.comments, // Include comments here
+            })),
+        };
+
+        res.status(200).json(formattedUser);
+    } catch (error) {
+        console.error('Error fetching user details:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+
   
-      // Fetch the user's details
-      const user = await User.findById(userId).select(
-        'profilePicture username firstname lastname email phoneNumber bio.bioInterests education workExperience courses certifications badges dateOfBirth location bio.bioAbout followersCount followingCount role'
+// Function to follow a user
+exports.followUser = async (req, res) => {
+    try {
+      // Get the target user's user ID from the request parameters
+      const targetUserId = req.params.userId; // Updated to use user ID
+  
+      // Get the logged-in user's user ID from the JWT token
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
+      const followerUserId = decoded.userId;
+  
+      // Check if the user is trying to follow themselves
+      if (followerUserId === targetUserId) {
+        return res.status(400).json({ message: "You can't follow yourself" });
+      }
+  
+      // Find the target user by their user ID
+      const targetUser = await User.findById(targetUserId);
+  
+      if (!targetUser) {
+        return res.status(404).json({ message: 'Target user not found' });
+      }
+  
+      // Find the logged-in user by their user ID
+      const user = await User.findById(followerUserId);
+  
+      // Check if the user is already following the target user
+      if (user.following.includes(targetUser.username)) {
+        return res.status(400).json({ message: 'You are already following this user' });
+      }
+  
+      // Update the logged-in user's following list and count
+      user.following.push(targetUser.username);
+      user.followingCount += 1;
+      await user.save();
+  
+      // Update the target user's followers list and count
+      targetUser.followers.push(user.username);
+      targetUser.followersCount += 1;
+      await targetUser.save();
+  
+      res.status(200).json({ message: 'You are now following this user' });
+    } catch (error) {
+      console.error('Error following user:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  };
+  
+  // Function to unfollow a user
+  exports.unfollowUser = async (req, res) => {
+    try {
+      // Get the target user's user ID from the request parameters
+      const targetUserId = req.params.userId; // Updated to use user ID
+  
+      // Get the logged-in user's user ID from the JWT token
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
+      const followerUserId = decoded.userId;
+  
+      // Check if the user is trying to unfollow themselves
+      if (followerUserId === targetUserId) {
+        return res.status(400).json({ message: "You can't unfollow yourself" });
+      }
+  
+      // Find the target user by their user ID
+      const targetUser = await User.findById(targetUserId);
+  
+      if (!targetUser) {
+        return res.status(404).json({ message: 'Target user not found' });
+      }
+  
+      // Find the logged-in user by their user ID
+      const user = await User.findById(followerUserId);
+  
+      // Check if the user is following the target user
+      if (!user.following.includes(targetUser.username)) {
+        return res.status(400).json({ message: "You are not following this user" });
+      }
+  
+      // Remove the target user from the logged-in user's following list and update count
+      user.following = user.following.filter((username) => username !== targetUser.username);
+      user.followingCount -= 1;
+      await user.save();
+  
+      // Remove the logged-in user from the target user's followers list and update count
+      targetUser.followers = targetUser.followers.filter((username) => username !== user.username);
+      targetUser.followersCount -= 1;
+      await targetUser.save();
+  
+      res.status(200).json({ message: 'You have unfollowed this user' });
+    } catch (error) {
+      console.error('Error unfollowing user:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  };
+
+  exports.getFollowUnfollowList = async (req, res) => {
+    try {
+      // Check if a valid JWT token is present in the request headers
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
+  
+      // Get the user's ID from the decoded token
+      const userId = decoded.userId;
+  
+      // Find the logged-in user by their ID
+      const loggedInUser = await User.findById(userId);
+  
+      if (!loggedInUser) {
+        return res.status(404).json({ error: 'Logged-in user not found' });
+      }
+  
+      // Get the list of users who are following the logged-in user
+      const followerList = await User.find({ following: loggedInUser.username }).select(
+        'username firstname lastname profilePicture role'
       );
   
-      // Fetch the user's associated content
-      const userContent = await Content.find({ userId }).select(
-        'heading captions contentURL hashtags relatedTopics postdate likes comments smeVerify _id'
-      )
-      .populate('likes', 'username') ;// Populate the usernames of users who liked the content
-     // .populate('comments', 'text date userId'); // Populate comments with text, date, and user IDs
-        
-     const totalPosts = await Content.countDocuments({ userId: user._id });
-      // Format the user details
-      const formattedUser = {
-        profilePicture: user.profilePicture,
-        username: user.username,
-        firstname: user.firstname,
-        lastname: user.lastname,
-        email: user.email,
-        phoneNumber: user.phoneNumber,
-        role: user.role === 'Subject Matter Expert' ? 'SME' : '',
-        totalPosts,
-        bioInterests: user.bio.bioInterests,
-        education: user.education,
-        workExperience: user.workExperience,
-        courses: user.courses,
-        certifications: user.certifications,
-        badges: user.badges,
-        dateOfBirth: user.dateOfBirth,
-        location: user.location,
-        bioAbout: user.bio.bioAbout,
-        followersCount: user.followersCount,
-        followingCount: user.followingCount,
-        content: userContent.map(content => ({
-          heading: content.heading,
-          captions: content.captions,
-          contentURL: content.contentURL,
-          hashtags: content.hashtags,
-          relatedTopics: content.relatedTopics,
-          postdate: content.postdate,
-          likes: {
-            count: content.likes.length,
-            users: content.likes.map(like => like.username),
-          },
-          //comments: content.comments.map(comment => ({
-           // text: comment.text,
-           // date: comment.date,
-           // userId: comment.userId,
-         // })),
-          smeVerify: content.smeVerify === 'Accepted' ? true : false,
-          contentId: content._id,
-        })),
-      };
+      // Get the list of users that the logged-in user is following
+      const followingList = await User.find({ username: { $in: loggedInUser.following } }).select(
+        'username firstname lastname profilePicture role'
+      );
   
-      res.status(200).json(formattedUser);
+      res.status(200).json({ followerList, followingList });
     } catch (error) {
-      console.error('Error fetching user details:', error);
+      console.error('Error getting follow/unfollow list:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   };

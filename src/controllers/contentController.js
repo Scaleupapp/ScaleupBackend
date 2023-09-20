@@ -1,6 +1,7 @@
 const aws = require('aws-sdk');
 const User = require('../models/userModel');
 const Content = require('../models/contentModel');
+const Comment = require('../models/commentModel');
 const jwt = require('jsonwebtoken'); // Import JWT library
 
 aws.config.update({
@@ -249,9 +250,16 @@ exports.getContentDetails = async (req, res) => {
         .populate('userId', 'username')
         .sort({ postdate: -1 }); // Sort by posting date in descending order
   
+      // Fetch comments for each content item and add them to the result
+      const contentWithComments = [];
+      for (const contentItem of filteredContent) {
+        const comments = await Comment.find({ contentId: contentItem._id });
+        contentWithComments.push({ ...contentItem.toObject(), comments });
+      }
+  
       // Add a "Verified" tag to content with smeVerify = "Accepted"
-      const contentWithVerification = filteredContent.map(content => ({
-        ...content.toObject(),
+      const contentWithVerification = contentWithComments.map(content => ({
+        ...content,
         isVerified: content.smeVerify === 'Accepted',
       }));
   
@@ -261,7 +269,7 @@ exports.getContentDetails = async (req, res) => {
       res.status(500).json({ message: 'Internal server error' });
     }
   };
-
+  
 // Controller function to like a content item
 exports.likeContent = async (req, res) => {
     try {
@@ -327,3 +335,54 @@ exports.likeContent = async (req, res) => {
       res.status(500).json({ error: 'Internal server error' });
     }
   };
+
+  // Controller function to add a comment
+exports.addComment = async (req, res) => {
+  try {
+    const { contentId, commentText } = req.body;
+
+    // Verify the user's identity using the JWT token
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
+
+    // Get the user's ID from the decoded token
+    const userId = decoded.userId;
+
+    // Find the user by ID
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Find the content by ID
+    const content = await Content.findById(contentId);
+
+    if (!content) {
+      return res.status(404).json({ error: 'Content not found' });
+    }
+
+    // Create a new comment document
+    const newComment = new Comment({
+      contentId: contentId,
+      userId: userId,
+      username: user.username,
+      commentText: commentText,
+    });
+
+    await newComment.save();
+
+    // Add the comment to the content's comments array
+    content.comments.push(newComment._id);
+    await content.save();
+
+    // Update the CommentCount in the content model
+    content.CommentCount = content.comments.length;
+    await content.save();
+
+    res.status(200).json({ message: 'Comment added successfully' });
+  } catch (error) {
+    console.error('Comment creation error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};

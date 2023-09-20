@@ -33,5 +33,17 @@ router.post('/search-users', userSearchController.searchUsers);
 
 router.get('/detail/:userId', userSearchController.getUserDetails);
 
+// Follow a user route
+router.post('/follow/:userId', userSearchController.followUser);
+
+// Unfollow a user route
+router.delete('/unfollow/:userId', userSearchController.unfollowUser);
+
+// Get the follower list of the logged-in user
+router.get('/followUnfollowList', userSearchController.getFollowUnfollowList);
+
+// Add a route for adding a comment to a content item
+router.post('/add-comment', contentController.addComment);
+
 
 module.exports = router;

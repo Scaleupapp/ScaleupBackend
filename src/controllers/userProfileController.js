@@ -1,5 +1,6 @@
 const User = require('../models/userModel');
 const Content = require('../models/contentModel'); // Import the Content model
+const Comment = require('../models/commentModel'); // Import the Comment model
 const jwt = require('jsonwebtoken');
 const aws = require('aws-sdk');
 
@@ -12,7 +13,6 @@ aws.config.update({
 
 const s3 = new aws.S3();
 
-// Get user's profile with their posted content
 const getUserProfile = async (req, res) => {
   try {
     const token = req.headers.authorization.split(' ')[1];
@@ -42,13 +42,21 @@ const getUserProfile = async (req, res) => {
     // Find all content posted by the user
     const userContent = await Content.find({ userId: userId });
 
-    // Return the user's profile information along with their posted content
-    res.json({ user, userContent });
+    // Fetch comments for each content item and add them to the result
+    const userContentWithComments = [];
+    for (const contentItem of userContent) {
+      const comments = await Comment.find({ contentId: contentItem._id });
+      userContentWithComments.push({ ...contentItem.toObject(), comments });
+    }
+
+    // Return the user's profile information along with their posted content and comments
+    res.json({ user, userContent: userContentWithComments });
   } catch (error) {
     console.error('Error getting user profile:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 
 module.exports = {
   getUserProfile,
