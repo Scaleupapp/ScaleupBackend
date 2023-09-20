@@ -46,6 +46,8 @@ exports.addContent = async (req, res) => {
         return res.status(500).json({ error: 'Failed to upload content' });
       }
 
+      
+
       // Create a new content document in MongoDB
       const newContent = new Content({
         username: user.username,
@@ -55,7 +57,10 @@ exports.addContent = async (req, res) => {
         verify: verify,
         relatedTopics: relatedTopics.split(',').map(topic => topic.trim()),
         contentURL: data.Location, // Store S3 URL in the contentURL field
-        userId: user._id // Link the content to the user who created it
+        userId: user._id ,// Link the content to the user who created it
+        smeVerify: user.role === 'Subject Matter Expert' ? 'Accepted' : verify === 'Yes' ? 'Pending' : 'NA',
+       
+
       });
 
       await newContent.save();

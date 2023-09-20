@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer'); // Import multer for handling file uploads
 const contentController = require('../controllers/contentController');
+const userSearchController = require('../controllers/userSearchController');
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
@@ -26,5 +27,11 @@ router.put('/like/:contentId', contentController.likeContent);
 
 // Unlike a content item
 router.put('/unlike/:contentId', contentController.unlikeContent);
+
+// Add a new route for searching users
+router.post('/search-users', userSearchController.searchUsers);
+
+router.get('/detail/:userId', userSearchController.getUserDetails);
+
 
 module.exports = router;
