@@ -2,6 +2,8 @@ const aws = require('aws-sdk');
 const User = require('../models/userModel');
 const Content = require('../models/contentModel');
 const Comment = require('../models/commentModel');
+const Notification = require('../models/notificationModel'); // Import the Notification model
+
 const jwt = require('jsonwebtoken'); // Import JWT library
 
 aws.config.update({
@@ -180,7 +182,7 @@ exports.updateContentRatingAndVerification = async (req, res) => {
     }
 };
 
-// Controller function to get content details by content ID
+// Controller function to get content details by content ID for verfification
 exports.getContentDetails = async (req, res) => {
     try {
       const { contentId } = req.params;
@@ -272,36 +274,52 @@ exports.getContentDetails = async (req, res) => {
   
 // Controller function to like a content item
 exports.likeContent = async (req, res) => {
-    try {
-      const { contentId } = req.params;
-      const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
-      const userId = decoded.userId;
-  
-      // Find the content by ID and update the likes array
-      const content = await Content.findByIdAndUpdate(
-        contentId,
-        { $addToSet: { likes: userId } }, // Add the user's ID to the likes array (no duplicates)
-        { new: true } // Return the updated content
-      );
-  
-      if (!content) {
-        return res.status(404).json({ error: 'Content not found' });
-      }
-  
-      // Update the likeCount
-      content.likeCount = content.likes.length;
-  
-      // Save the updated content
-      await content.save();
-  
-      // Return the updated likeCount
-      res.json({ likeCount: content.likeCount });
-    } catch (error) {
-      console.error('Error liking content:', error);
-      res.status(500).json({ error: 'Internal server error' });
+  try {
+    const { contentId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
+    const userId = decoded.userId;
+
+    // Find the content by ID and update the likes array
+    const updatedContent = await Content.findByIdAndUpdate(
+      contentId,
+      { $addToSet: { likes: userId } }, // Add the user's ID to the likes array (no duplicates)
+      { new: true } // Return the updated content
+    );
+
+    if (!updatedContent) {
+      return res.status(404).json({ error: 'Content not found' });
     }
-  };
+
+    // Update the likeCount
+    updatedContent.likeCount = updatedContent.likes.length;
+
+    // Save the updated content
+    await updatedContent.save();
+
+    // Create a notification for the content owner
+    if (updatedContent.userId.toString() !== userId) {
+
+      const liker = await User.findById(userId);
+
+      // Don't create a notification if the user is liking their own content
+      const recipientId = updatedContent.userId; // The user who owns the content
+      const senderId = userId; // The user who liked the content
+      const type = 'like'; // Notification type
+      const notificationContent = `${liker.username} liked your post.`; // Notification content
+      const link = `/api/content/post/${contentId}`; // Link to the liked post
+
+      await createNotification(recipientId, senderId, type, notificationContent, link);
+    }
+
+    // Return the updated likeCount
+    res.json({ likeCount: updatedContent.likeCount });
+  } catch (error) {
+    console.error('Error liking content:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
   
   // Controller function to unlike a content item
   exports.unlikeContent = async (req, res) => {
@@ -380,9 +398,101 @@ exports.addComment = async (req, res) => {
     content.CommentCount = content.comments.length;
     await content.save();
 
+     // Create a notification for the content owner
+     if (content.userId.toString() !== userId) {
+      // Don't create a notification if the comment is on the user's own content
+      const recipientId = content.userId; // The user who owns the post
+      const senderId = userId; // The user who commented
+      const type = 'comment'; // Notification type
+      const notificationContent = `${user.username} commented on your post.`; // Notification content
+      const link = `/api/content/post/${contentId}`; // Link to the commented post
+
+      // Use a different variable name for notification content
+      await createNotification(recipientId, senderId, type, notificationContent, link);
+    }
+
     res.status(200).json({ message: 'Comment added successfully' });
   } catch (error) {
     console.error('Comment creation error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+
+// Controller function to get content details by content ID
+exports.getPostDetails = async (req, res) => {
+  try {
+    const { contentId } = req.params;
+
+    // Verify the user's identity using the JWT token
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
+
+    // Get the user's ID from the decoded token
+    const userId = decoded.userId;
+
+    // Find the content by ID
+    const content = await Content.findById(contentId).populate('userId', 'username');
+
+    if (!content) {
+      return res.status(404).json({ error: 'Content not found' });
+    }
+
+    // You can include any additional details you want to display here
+    const contentDetails = {
+      _id: content._id,
+      username: content.username,
+      postdate: content.postdate,
+      relatedTopics: content.relatedTopics,
+      hashtags: content.hashtags,
+      captions: content.captions,
+      heading: content.heading,
+      contentURL: content.contentURL,
+      likeCount: content.likeCount,
+      CommentCount: content.CommentCount,
+
+    };
+
+    res.json({ contentDetails });
+  } catch (error) {
+    console.error('Error getting content details:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Function to create and save a new notification
+async function createNotification(recipientId, senderId, type, content, link) {
+  const newNotification = new Notification({
+    recipient: recipientId,
+    sender: senderId,
+    type: type,
+    content: content,
+    link: link,
+  });
+
+  await newNotification.save();
+};
+
+// Controller function to retrieve notifications for the logged-in user
+exports.getNotifications = async (req, res) => {
+  try {
+    // Get the JWT token from the request headers
+    const token = req.headers.authorization.split(' ')[1];
+    
+    // Verify the token to get the user's ID
+    const decoded = jwt.verify(token, 'scaleupkey'); // Replace 'your-secret-key' with your actual secret key
+
+    // Get the user's ID from the decoded token
+    const userId = decoded.userId;
+
+    // Query the database for notifications for the user
+    const notifications = await Notification.find({ recipient: userId })
+      .sort({ createdAt: -1 }) // Sort by most recent first
+      .limit(10); // Limit the number of notifications to retrieve
+
+    res.json(notifications);
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

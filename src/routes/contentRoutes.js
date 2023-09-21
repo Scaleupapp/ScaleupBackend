@@ -45,5 +45,11 @@ router.get('/followUnfollowList', userSearchController.getFollowUnfollowList);
 // Add a route for adding a comment to a content item
 router.post('/add-comment', contentController.addComment);
 
+// Add a route for viewing a specific post
+router.get('/post/:contentId', contentController.getPostDetails);
+
+// Add a new route to get notifications
+router.get('/notifications', contentController.getNotifications);
+
 
 module.exports = router;

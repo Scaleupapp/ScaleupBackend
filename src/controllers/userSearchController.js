@@ -1,6 +1,7 @@
 const User = require('../models/userModel');
 const mongoose = require('mongoose');
 const Content = require('../models/contentModel');
+//const createNotification = require('../controllers/contentController').createNotification;
 const jwt = require('jsonwebtoken');
 
 // Controller function to search for users based on various criteria
@@ -136,54 +137,55 @@ exports.getUserDetails = async (req, res) => {
 
 
   
-// Function to follow a user
-exports.followUser = async (req, res) => {
-    try {
-      // Get the target user's user ID from the request parameters
-      const targetUserId = req.params.userId; // Updated to use user ID
-  
-      // Get the logged-in user's user ID from the JWT token
-      const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
-      const followerUserId = decoded.userId;
-  
-      // Check if the user is trying to follow themselves
-      if (followerUserId === targetUserId) {
-        return res.status(400).json({ message: "You can't follow yourself" });
+  // Function to follow a user
+  exports.followUser = async (req, res) => {
+      try {
+        // Get the target user's user ID from the request parameters
+        const targetUserId = req.params.userId; // Updated to use user ID
+    
+        // Get the logged-in user's user ID from the JWT token
+        const token = req.headers.authorization.split(' ')[1];
+        const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
+        const followerUserId = decoded.userId;
+    
+        // Check if the user is trying to follow themselves
+        if (followerUserId === targetUserId) {
+          return res.status(400).json({ message: "You can't follow yourself" });
+        }
+    
+        // Find the target user by their user ID
+        const targetUser = await User.findById(targetUserId);
+    
+        if (!targetUser) {
+          return res.status(404).json({ message: 'Target user not found' });
+        }
+    
+        // Find the logged-in user by their user ID
+        const user = await User.findById(followerUserId);
+    
+        // Check if the user is already following the target user
+        if (user.following.includes(targetUser.username)) {
+          return res.status(400).json({ message: 'You are already following this user' });
+        }
+    
+        // Update the logged-in user's following list and count
+        user.following.push(targetUser.username);
+        user.followingCount += 1;
+        await user.save();
+    
+        // Update the target user's followers list and count
+        targetUser.followers.push(user.username);
+        targetUser.followersCount += 1;
+        await targetUser.save();
+    
+       // createNotification(followerUserId, targetUserId, 'follow',null);
+        res.status(200).json({ message: 'You are now following this user' });
+      } catch (error) {
+        console.error('Error following user:', error);
+        res.status(500).json({ message: 'Internal server error' });
       }
-  
-      // Find the target user by their user ID
-      const targetUser = await User.findById(targetUserId);
-  
-      if (!targetUser) {
-        return res.status(404).json({ message: 'Target user not found' });
-      }
-  
-      // Find the logged-in user by their user ID
-      const user = await User.findById(followerUserId);
-  
-      // Check if the user is already following the target user
-      if (user.following.includes(targetUser.username)) {
-        return res.status(400).json({ message: 'You are already following this user' });
-      }
-  
-      // Update the logged-in user's following list and count
-      user.following.push(targetUser.username);
-      user.followingCount += 1;
-      await user.save();
-  
-      // Update the target user's followers list and count
-      targetUser.followers.push(user.username);
-      targetUser.followersCount += 1;
-      await targetUser.save();
-  
-      res.status(200).json({ message: 'You are now following this user' });
-    } catch (error) {
-      console.error('Error following user:', error);
-      res.status(500).json({ message: 'Internal server error' });
-    }
-  };
-  
+    };
+    
   // Function to unfollow a user
   exports.unfollowUser = async (req, res) => {
     try {
