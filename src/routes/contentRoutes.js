@@ -55,5 +55,8 @@ router.get('/notifications', contentController.getNotifications);
 // Create Story  route
 router.post('/createstory', upload.single('contentFile'), storyController.addStory);
 
+// Define a route for getting homepage content
+router.get('/homepage', contentController.getHomepageContent);
+
 
 module.exports = router;

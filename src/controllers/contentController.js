@@ -511,3 +511,54 @@ exports.getNotifications = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+ exports.getHomepageContent = async (req, res) => {
+  try {
+    // Verify the user's identity using the JWT token
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
+
+    // Get the user's ID from the decoded token
+    const userId = decoded.userId;
+
+    // Find the user by ID in the database
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Get the list of usernames that the logged-in user is following
+    const followingUsernames = user.following || [];
+
+    // Find the user IDs corresponding to the usernames in the following array
+    const followingUsers = await User.find({ username: { $in: followingUsernames } });
+
+    // Extract the user IDs from the followingUsers array
+    const followingUserIds = followingUsers.map(user => user._id);
+
+    // Query for content created by the users the logged-in user is following
+    const homepageContent = await Content.find({ userId: { $in: followingUserIds } })
+      .select('username postdate heading hashtags relatedTopics captions contentURL likes comments smeVerify')
+      .populate('userId', 'username')
+      .sort({ postdate: -1 });
+
+    // Fetch comments for each content item and add them to the result
+    const contentWithComments = [];
+    for (const contentItem of homepageContent) {
+      const comments = await Comment.find({ contentId: contentItem._id });
+      contentWithComments.push({ ...contentItem.toObject(), comments });
+    }
+
+    // Add a "Verified" tag to content with smeVerify = "Accepted"
+    const contentWithVerification = contentWithComments.map(content => ({
+      ...content,
+      isVerified: content.smeVerify === 'Accepted',
+    }));
+
+    res.json({ content: contentWithVerification });
+  } catch (error) {
+    console.error('Error getting homepage content:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
