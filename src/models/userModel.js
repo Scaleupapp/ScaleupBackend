@@ -96,7 +96,7 @@ followersCount: {
   type: Number,
   default: 0, // Default count is 0
 },
-
+blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 resume: String,
 
 followingCount: {

@@ -241,11 +241,25 @@ exports.getContentDetails = async (req, res) => {
       // Get the user's bio interests
       const userBioInterests = user.bio.bioInterests;
   
-      // Query for content matching bio interests
+      // Get the list of blocked user IDs from the logged-in user's document
+      const blockedUserIds = user.blockedUsers || [];
+
+      // Get the list of users who have blocked the logged-in user
+    const usersWhoBlockedLoggedInUser = await User.find({ blockedUsers: userId });
+
+    // Create an array of user IDs who have blocked the logged-in user
+    const usersWhoBlockedLoggedInUserIds = usersWhoBlockedLoggedInUser.map(user => user._id);
+  
+      // Query for content matching bio interests and exclude blocked users
       const filteredContent = await Content.find({
-        $or: [
-          { hashtags: { $in: userBioInterests.map(tag => tag.replace('#', '')) } }, // Match hashtags
-          { relatedTopics: { $in: userBioInterests } }, // Match related topics
+        $and: [
+          { userId: { $nin: [...blockedUserIds, ...usersWhoBlockedLoggedInUserIds] } }, // Exclude blocked users' content
+          {
+            $or: [
+              { hashtags: { $in: userBioInterests.map(tag => tag.replace('#', '')) } }, // Match hashtags
+              { relatedTopics: { $in: userBioInterests } }, // Match related topics
+            ],
+          },
         ],
       })
         .select('username postdate heading hashtags relatedTopics captions contentURL likes comments smeVerify')
@@ -271,6 +285,7 @@ exports.getContentDetails = async (req, res) => {
       res.status(500).json({ message: 'Internal server error' });
     }
   };
+  
   
 // Controller function to like a content item
 exports.likeContent = async (req, res) => {

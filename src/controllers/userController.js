@@ -226,10 +226,79 @@ const deleteCertification = async (req, res) => {
   }
 };
 
+const blockUser = async (req, res) => {
+  try {
+    const { targetUserId } = req.params;
+    
+// Verify the user's identity using the JWT token
+const token = req.headers.authorization.split(' ')[1];
+const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
+
+// Get the user's ID from the decoded token
+const userId = decoded.userId;
+
+// Find the user by ID in the database
+const user = await User.findById(userId);
+const targetUser = await User.findById(targetUserId);
+
+if (!user) {
+  return res.status(404).json({ message: 'User not found' });
+}
+
+
+    // Add the target user to the logged-in user's blockedUsers array
+    await User.findByIdAndUpdate(userId, { $addToSet: { blockedUsers: targetUserId } });
+
+    // Remove the target user from the logged-in user's followers and following lists
+    await User.findByIdAndUpdate(userId, { $pull: { following: targetUser.username } });
+    await User.findByIdAndUpdate(targetUserId, { $pull: { followers: user.username } });
+
+    // Recalculate the followers and following counts for both users
+    await User.findByIdAndUpdate(userId, { $inc: { followingCount: -1} });
+    await User.findByIdAndUpdate(targetUserId, { $inc: { followersCount: -1 } });
+
+    res.json({ message: 'User blocked successfully' });
+  } catch (error) {
+    console.error('Error blocking user:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+const unblockUser = async (req, res) => {
+  try {
+    const { targetUserId } = req.params;
+
+    // Verify the user's identity using the JWT token
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
+
+    // Get the user's ID from the decoded token
+    const userId = decoded.userId;
+
+    // Find the user by ID in the database
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Remove the target user from the logged-in user's blockedUsers array
+    await User.findByIdAndUpdate(userId, { $pull: { blockedUsers: targetUserId } });
+
+    res.json({ message: 'User unblocked successfully' });
+  } catch (error) {
+    console.error('Error unblocking user:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+
 module.exports = {
   updateProfile,
   deleteEducation,
   deleteWorkExperience,
   deleteCourse,
-  deleteCertification
+  deleteCertification,
+  blockUser,
+  unblockUser,
 };

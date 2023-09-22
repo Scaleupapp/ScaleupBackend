@@ -47,5 +47,11 @@ router.get('/profiles', userProfileController.getUserProfile);
 // Delete certification entry route
 router.delete('/certifications/:certificationId', userController.deleteCertification);
 
+// Route for blocking a user
+router.post('/block/:targetUserId', userController.blockUser);
+
+// Route for unblocking a user
+router.post('/unblock/:targetUserId', userController.unblockUser);
+
 
 module.exports = router;

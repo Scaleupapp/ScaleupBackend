@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer'); // Import multer for handling file uploads
 const contentController = require('../controllers/contentController');
 const userSearchController = require('../controllers/userSearchController');
+const storyController = require('../controllers/storyController');
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
@@ -50,6 +51,9 @@ router.get('/post/:contentId', contentController.getPostDetails);
 
 // Add a new route to get notifications
 router.get('/notifications', contentController.getNotifications);
+
+// Create Story  route
+router.post('/createstory', upload.single('contentFile'), storyController.addStory);
 
 
 module.exports = router;

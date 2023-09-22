@@ -20,14 +20,29 @@ exports.searchUsers = async (req, res) => {
     // Build an array of regex patterns for each search term
     const regexPatterns = searchTerms.map(term => new RegExp(term, 'i'));
 
-    // Search users based on multiple fields
+    // Get the list of blocked users by the logged-in user
+    const loggedInUser = await User.findById(userId);
+    const blockedUserIds = loggedInUser.blockedUsers || [];
+
+    // Get the list of users who have blocked the logged-in user
+    const usersWhoBlockedLoggedInUser = await User.find({ blockedUsers: userId });
+    const usersWhoBlockedLoggedInUserIds = usersWhoBlockedLoggedInUser.map(user => user._id);
+
+
+    // Search users based on multiple fields and exclude blocked users
     const searchResults = await User.find({
-      $or: [
-        { username: { $in: regexPatterns } }, // Case-insensitive username search
-        { firstname: { $in: regexPatterns } }, // Case-insensitive first name search
-        { lastname: { $in: regexPatterns } }, // Case-insensitive last name search
-        { location: { $in: regexPatterns } }, // Case-insensitive location search
-        { 'bio.bioInterests': { $in: regexPatterns } }, // Case-insensitive interests search
+      $and: [
+        { _id: { $ne: userId } }, // Exclude the logged-in user
+        {
+          $or: [
+            { username: { $in: regexPatterns } }, // Case-insensitive username search
+            { firstname: { $in: regexPatterns } }, // Case-insensitive first name search
+            { lastname: { $in: regexPatterns } }, // Case-insensitive last name search
+            { location: { $in: regexPatterns } }, // Case-insensitive location search
+            { 'bio.bioInterests': { $in: regexPatterns } }, // Case-insensitive interests search
+          ],
+        },
+        { _id: { $nin: [...blockedUserIds, ...usersWhoBlockedLoggedInUserIds] } }, // Exclude blocked users
       ],
     })
       .select(
@@ -58,85 +73,102 @@ exports.searchUsers = async (req, res) => {
   }
 };
 
-// Controller function to get detailed information about a specific user
+
+
 // Controller function to get detailed information about a specific user
 exports.getUserDetails = async (req, res) => {
-    try {
-        // Get the user's unique identifier from the request parameters
-        const { userId } = req.params;
+  try {
+    // Get the user's unique identifier from the request parameters
+    const { userId } = req.params;
 
-        // Fetch the user's details
-        const user = await User.findById(userId).select(
-            'profilePicture username firstname lastname email phoneNumber bio.bioInterests education workExperience courses certifications badges dateOfBirth location bio.bioAbout followers following followersCount followingCount role'
-        );
+    // Check if a valid JWT token is present in the request headers
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
 
-        // Check if the user was not found
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
+    // Get the user's ID from the decoded token
+    const loggedUserId = decoded.userId;
 
-        // Fetch the user's associated content, populating both 'likes' and 'comments'
-        const userContent = await Content.find({ userId }).select(
-            'heading captions contentURL hashtags relatedTopics postdate likes comments smeVerify'
-        )
-        .populate('likes', 'username')
-        .populate({
-            path: 'comments',
-            select: 'commentText username commentDate', // Adjust the fields you want to select
-        });
+    // Fetch the user's details, including blockedUsers
+    const user = await User.findById(userId).select(
+      'profilePicture username firstname lastname email phoneNumber bio.bioInterests education workExperience courses certifications badges dateOfBirth location bio.bioAbout followers following followersCount followingCount role blockedUsers'
+    );
 
-        const totalPosts = await Content.countDocuments({ userId: user._id });
-
-        // Format the user details
-        const formattedUser = {
-            profilePicture: user.profilePicture,
-            userId: user._id,
-            username: user.username,
-            firstname: user.firstname,
-            lastname: user.lastname,
-            email: user.email,
-            phoneNumber: user.phoneNumber,
-            role: user.role === 'Subject Matter Expert' ? 'SME' : '',
-            totalPosts,
-            bioInterests: user.bio.bioInterests,
-            education: user.education,
-            workExperience: user.workExperience,
-            courses: user.courses,
-            certifications: user.certifications,
-            badges: user.badges,
-            dateOfBirth: user.dateOfBirth,
-            location: user.location,
-            bioAbout: user.bio.bioAbout,
-            followersCount: user.followersCount,
-            followers: user.followers,
-            followingCount: user.followingCount,
-            following: user.following,
-            content: userContent.map(content => ({
-                heading: content.heading,
-                captions: content.captions,
-                contentURL: content.contentURL,
-                hashtags: content.hashtags,
-                relatedTopics: content.relatedTopics,
-                postdate: content.postdate,
-                likes: {
-                    count: content.likes.length,
-                    users: content.likes.map(like => like.username),
-                },
-                smeVerify: content.smeVerify === 'Accepted' ? true : false,
-                contentId: content._id,
-                comments: content.comments, // Include comments here
-            })),
-        };
-
-        res.status(200).json(formattedUser);
-    } catch (error) {
-        console.error('Error fetching user details:', error);
-        res.status(500).json({ error: 'Internal server error' });
+    // Check if the user was not found
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
     }
+
+    const targetUser = await User.findById(userId);
+    const loggedInUser = await User.findById(loggedUserId);
+    // Check if either user has blocked the other
+    if (
+      loggedInUser.blockedUsers.includes(userId) ||
+      targetUser.blockedUsers.includes(loggedUserId)
+    ) {
+      // If either user has blocked the other, return a message indicating the block
+      return res.status(403).json({ error: 'Access denied. This user is blocked.' });
+    }
+
+    // Fetch the user's associated content, populating both 'likes' and 'comments'
+    const userContent = await Content.find({ userId }).select(
+      'heading captions contentURL hashtags relatedTopics postdate likes comments smeVerify'
+    )
+      .populate('likes', 'username')
+      .populate({
+        path: 'comments',
+        select: 'commentText username commentDate', // Adjust the fields you want to select
+      });
+
+    const totalPosts = await Content.countDocuments({ userId: user._id });
+
+    // Format the user details
+    const formattedUser = {
+      profilePicture: user.profilePicture,
+      userId: user._id,
+      username: user.username,
+      firstname: user.firstname,
+      lastname: user.lastname,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      role: user.role === 'Subject Matter Expert' ? 'SME' : '',
+      totalPosts,
+      bioInterests: user.bio.bioInterests,
+      education: user.education,
+      workExperience: user.workExperience,
+      courses: user.courses,
+      certifications: user.certifications,
+      badges: user.badges,
+      dateOfBirth: user.dateOfBirth,
+      location: user.location,
+      bioAbout: user.bio.bioAbout,
+      followersCount: user.followersCount,
+      followers: user.followers,
+      followingCount: user.followingCount,
+      following: user.following,
+      content: userContent.map(content => ({
+        heading: content.heading,
+        captions: content.captions,
+        contentURL: content.contentURL,
+        hashtags: content.hashtags,
+        relatedTopics: content.relatedTopics,
+        postdate: content.postdate,
+        likes: {
+          count: content.likes.length,
+          users: content.likes.map(like => like.username),
+        },
+        smeVerify: content.smeVerify === 'Accepted',
+        contentId: content._id,
+        comments: content.comments, // Include comments here
+      })),
+    };
+
+    res.status(200).json(formattedUser);
+  } catch (error) {
+    console.error('Error fetching user details:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 };
 
-
-  
   // Function to follow a user
   exports.followUser = async (req, res) => {
       try {
