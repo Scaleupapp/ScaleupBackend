@@ -3,6 +3,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/userModel');
+const UserSettings = require('../models/userSettingsModel');
 
 
 const router = express.Router();
@@ -83,8 +84,16 @@ const register = async (req, res) => {
       phoneNumber,
     });
 
+ 
+
     // Save the new user to the database
     await newUser.save();
+
+       // Create user settings for the new user
+       const newuserSettings = new UserSettings({
+        userId: newUser._id,
+    });
+    await newuserSettings.save();
 
     // Return a success message
     res.json({ message: 'Registration successful' });

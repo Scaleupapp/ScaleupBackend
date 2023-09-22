@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/userModel');
+const UserSettings = require('../models/userSettingsModel');
 
 const changePassword = async (req, res) => {
   try {
@@ -40,6 +41,33 @@ const changePassword = async (req, res) => {
   }
 };
 
+const updateCommentPrivileges = async (req, res) => {
+    try {
+      const { commentPrivileges } = req.body; // New comment privileges (e.g., 'everyone', 'followers', 'no one')
+  
+      // Verify the user's identity using the JWT token
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
+      const userId = decoded.userId;
+  
+      // Find the user settings by user ID in the database
+      const userSettings = await UserSettings.findOne({ userId });
+      if (!userSettings) {
+        return res.status(404).json({ message: 'User settings not found' });
+      }
+  
+      // Update the user's comment privileges
+      userSettings.commentPrivacy = commentPrivileges;
+      await userSettings.save();
+  
+      res.json({ message: 'Comment privileges updated successfully' });
+    } catch (error) {
+      console.error('Error updating comment privileges:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+
 module.exports = {
   changePassword,
+    updateCommentPrivileges,
 };

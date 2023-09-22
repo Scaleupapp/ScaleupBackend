@@ -56,4 +56,7 @@ router.post('/unblock/:targetUserId', userController.unblockUser);
 // Change Password route
 router.post('/change-password', settingsController.changePassword);
 
+//Change comments visibility route
+router.post('/updateCommentPrivileges', settingsController.updateCommentPrivileges);
+
 module.exports = router;

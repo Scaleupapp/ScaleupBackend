@@ -104,6 +104,13 @@ followingCount: {
   default: 0, // Default count is 0
 },
 
+// Reference to UserSettings
+userSettings: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'UserSettings',
+},
+
+
 },
 
 
