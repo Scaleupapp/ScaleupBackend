@@ -32,7 +32,7 @@ const login = async (req, res) => {
       // Password is correct
       // Create a JWT token for session management (customize as needed)
       const token = jwt.sign({ userId: user._id }, 'scaleupkey', {
-        expiresIn: '24h',
+        expiresIn: '240h',
       });
 
       // Return a success message and the token
@@ -94,7 +94,18 @@ const register = async (req, res) => {
   }
 };
 
+// Signout route
+const signout = (req, res) => {
+
+  // Just clear the JWT token on the client-side
+  // You can remove the token from cookies or local storage here
+
+  // You can send a success message if needed
+  res.status(200).json({ message: 'Signout successful' });
+};
+
 module.exports = {
   login,
-  register, // Export the register function as an object property
+  register, 
+  signout,
 };

@@ -7,7 +7,7 @@ const workExperienceController = require('../controllers/workExperienceControlle
 const coursesController = require('../controllers/coursesController'); 
 const certificationsController = require('../controllers/certificationsController');
 const userProfileController = require('../controllers/userProfileController');
-
+const settingsController = require('../controllers/settingsController');
 
 const multer = require('multer');
 
@@ -53,5 +53,7 @@ router.post('/block/:targetUserId', userController.blockUser);
 // Route for unblocking a user
 router.post('/unblock/:targetUserId', userController.unblockUser);
 
+// Change Password route
+router.post('/change-password', settingsController.changePassword);
 
 module.exports = router;
