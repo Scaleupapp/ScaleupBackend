@@ -13,22 +13,23 @@ const login = async (req, res) => {
   const { loginIdentifier, password } = req.body;
 
   try {
-    // Find the user  by email, or phone number
+    // Find the user by email, username, or phone number
     const user = await User.findOne({
-        $or: [
-          { email: loginIdentifier },
-          { username: loginIdentifier },
-          { phoneNumber: loginIdentifier },
-        ],
-      });
+      $or: [
+        { email: loginIdentifier },
+        { username: loginIdentifier },
+        { phoneNumber: loginIdentifier },
+      ],
+    });
+
     // If the user doesn't exist, return an error
     if (!user) {
-      return res.status(401).json({ message: 'Login failed' });
+      return res.status(401).json({ message: 'Invalid User Credentials' });
     }
 
     // Compare the user-entered password with the stored hashed password
     const isPasswordValid = await bcrypt.compare(password, user.password);
-    
+
     if (isPasswordValid) {
       // Password is correct
       // Create a JWT token for session management (customize as needed)
@@ -40,13 +41,14 @@ const login = async (req, res) => {
       res.json({ message: 'Login successful', token });
     } else {
       // Password is incorrect
-      res.status(401).json({ message: 'Login failed' });
+      res.status(401).json({ message: 'Incorrect Password' });
     }
   } catch (error) {
     console.error('Error during login:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 
 module.exports = {
   login, // Export the login function as an object property
