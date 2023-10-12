@@ -104,6 +104,10 @@ followingCount: {
   default: 0, // Default count is 0
 },
 
+loginOtp: {
+  type: String,
+},
+
 // Reference to UserSettings
 userSettings: {
   type: mongoose.Schema.Types.ObjectId,

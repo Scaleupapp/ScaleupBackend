@@ -8,6 +8,7 @@ const userRoute = require('./routes/userRoute'); // Import userRoute
 const authRoute = require('./routes/authRoute');
 const contentRoute = require('./routes/contentRoutes');
 const cors = require('cors');
+const twilio = require('twilio');
 
 const PORT = process.env.PORT || 3000;
 
@@ -18,6 +19,11 @@ aws.config.update({
   region: 'ap-southeast-2',
 });
 
+
+const twilioClient = twilio(
+  'AC7d204728be5bc5cbe984b4fb5804cda1',
+  '1f79f5a9b86f88bfe975a2aa779fd556'
+);
 
 app.use(bodyParser.json());
 app.use(cors());

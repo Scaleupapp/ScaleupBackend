@@ -4,9 +4,12 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/userModel');
 const UserSettings = require('../models/userSettingsModel');
-
-
+const twilio = require('twilio'); // Import Twilio
 const router = express.Router();
+const twilioClient = twilio(
+  'AC7d204728be5bc5cbe984b4fb5804cda1',
+  '1f79f5a9b86f88bfe975a2aa779fd556'
+);
 
 // Login route
 const login = async (req, res) => {
@@ -115,8 +118,90 @@ const signout = (req, res) => {
   res.status(200).json({ message: 'Signout successful' });
 };
 
+function generateRandomOTP(length) {
+  const charset = '0123456789'; // You can add more characters for a more complex OTP
+  let otp = '';
+
+  for (let i = 0; i < length; i++) {
+    const randomIndex = Math.floor(Math.random() * charset.length);
+    otp += charset[randomIndex];
+  }
+
+  return otp;
+}
+
+const loginWithOTP = async (req, res) => {
+  let { phoneNumber } = req.body;
+
+  try {
+    // Check if the phone number is associated with a user in your database
+    const user = await User.findOne({ phoneNumber: phoneNumber });
+
+    if (!user) {
+      return res.status(401).json({ message: 'Phone number not registered' });
+    }
+
+    if (!phoneNumber.startsWith('+91')) {
+      phoneNumber = '+91' + phoneNumber;
+    }
+
+    // Generate a random OTP
+    let otp = generateRandomOTP(6); // Generate OTP for this request
+
+    // Send the OTP via SMS using Twilio
+    await twilioClient.messages.create({
+      body: `Your Authentication OTP for ScaleUp: ${otp} . Please note that this OTP is valid for 5 minutes only.`,
+      from: '+12564884897', // Use your Twilio phone number
+      to: phoneNumber,
+    });
+
+    // Store the OTP in the user's document
+    user.loginOtp = otp;
+    await user.save();
+
+    // Respond with a success message
+    res.status(200).json({ message: 'OTP sent successfully' });
+  } catch (error) {
+    console.error('OTP generation and sending error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+
+const verifyOTP = async (req, res) => {
+  const { phoneNumber, userOTP } = req.body;
+
+  try {
+    // Find the user by phone number
+    const user = await User.findOne({ phoneNumber: phoneNumber });
+
+    // Check if the user has a login OTP
+    if (!user.loginOtp || user.loginOtp !== userOTP) {
+      return res.status(401).json({ message: 'Incorrect OTP' });
+    }
+
+    // If OTP is correct, generate a JWT token and return it
+    const token = jwt.sign({ userId: user._id }, 'scaleupkey', {
+      expiresIn: '240h',
+    });
+
+    // Remove the login OTP from the user document
+    user.loginOtp = undefined;
+    await user.save();
+
+    res.json({ message: 'Login successful', token });
+  } catch (error) {
+    console.error('OTP verification error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+
+
 module.exports = {
   login,
   register, 
   signout,
+  loginWithOTP,
+  verifyOTP,
 };

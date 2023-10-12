@@ -13,5 +13,11 @@ router.post('/register', authController.register);
 // Signout route
 router.get('/signout', authController.signout);
 
+// Generate OTP route
+router.post('/otp-gen', authController.loginWithOTP);
+
+//Verify OTP route
+router.post('/otp-verify', authController.verifyOTP);
+
 
 module.exports = router;
