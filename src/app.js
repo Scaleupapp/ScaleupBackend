@@ -18,6 +18,7 @@ aws.config.update({
   region: 'ap-southeast-2',
 });
 
+
 app.use(bodyParser.json());
 app.use(cors());
 

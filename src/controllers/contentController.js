@@ -40,7 +40,9 @@ exports.addContent = async (req, res) => {
       Bucket: 'scaleupbucket',
       Key: `${folderKey}${contentFile.originalname}`, // You can adjust the file naming here
       Body: contentFile.buffer,
-      ContentType: contentFile.mimetype
+      ContentType: contentFile.mimetype,
+      ACL: 'public-read', // Set ACL to public-read
+
     };
 
     s3.upload(params, async (err, data) => {
