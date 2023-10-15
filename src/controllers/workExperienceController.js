@@ -2,11 +2,18 @@ const User = require('../models/userModel');
 const jwt = require('jsonwebtoken');
 const aws = require('aws-sdk');
 
+require('dotenv').config();
+
+const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
+const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+const awsRegion = process.env.AWS_REGION;
+const jwtSecret = process.env.JWT_SECRET;
+
 // Configure AWS SDK with your credentials
 aws.config.update({
-  accessKeyId: 'AKIA4OBHVFBJP4K3I5MX',
-  secretAccessKey: 'wYrxeM9CCHQSUwQRtrYEr0wiWPk2KJ7gZI3PLP2R',
-  region: 'ap-southeast-2',
+  accessKeyId:awsAccessKeyId,
+  secretAccessKey: awsSecretAccessKey,
+  region: awsRegion,
 });
 
 const s3 = new aws.S3();
@@ -16,7 +23,7 @@ const updateWorkExperience = async (req, res) => {
   try {
     // Verify the user's identity using the JWT token
     const token = req.headers.authorization.split(' ')[1];
-    const decoded = jwt.verify(token, 'scaleupkey');
+    const decoded = jwt.verify(token, jwtSecret);
 
     // Get the user's ID from the decoded token
     const userId = decoded.userId;

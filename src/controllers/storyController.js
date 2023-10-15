@@ -3,11 +3,19 @@ const jwt = require('jsonwebtoken');
 const aws = require('aws-sdk');
 const multer = require('multer');
 
+require('dotenv').config();
+
+
+const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
+const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+const awsRegion = process.env.AWS_REGION;
+const jwtSecret = process.env.JWT_SECRET;
+
 aws.config.update({
-    accessKeyId: 'AKIA4OBHVFBJP4K3I5MX',
-    secretAccessKey: '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',
-    region: 'ap-southeast-2',
-  });
+  accessKeyId:awsAccessKeyId,
+  secretAccessKey: awsSecretAccessKey,
+  region: awsRegion,
+});
 
 const s3 = new aws.S3();
 
@@ -21,7 +29,7 @@ exports.addStory = upload.single('contentFile'), async (req, res) => {
 
     // Verify the user's identity using the JWT token
     const token = req.headers.authorization.split(' ')[1];
-    const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
+    const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
 
     // Check if the user ID in the token matches the provided user ID
     if (userId !== decoded.userId) {

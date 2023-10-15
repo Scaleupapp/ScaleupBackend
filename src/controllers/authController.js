@@ -6,9 +6,18 @@ const User = require('../models/userModel');
 const UserSettings = require('../models/userSettingsModel');
 const twilio = require('twilio'); // Import Twilio
 const router = express.Router();
+
+require('dotenv').config();
+
+
+const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
+const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
+const jwtSecret = process.env.JWT_SECRET;
+
+
 const twilioClient = twilio(
-  'AC7d204728be5bc5cbe984b4fb5804cda1',
-  '1f79f5a9b86f88bfe975a2aa779fd556'
+  twilioAccountSid,
+  twilioAuthToken
 );
 
 // Login route
@@ -36,7 +45,7 @@ const login = async (req, res) => {
     if (isPasswordValid) {
       // Password is correct
       // Create a JWT token for session management (customize as needed)
-      const token = jwt.sign({ userId: user._id }, 'scaleupkey', {
+      const token = jwt.sign({ userId: user._id }, jwtSecret, {
         expiresIn: '240h',
       });
 
@@ -181,7 +190,7 @@ const verifyOTP = async (req, res) => {
     }
 
     // If OTP is correct, generate a JWT token and return it
-    const token = jwt.sign({ userId: user._id }, 'scaleupkey', {
+    const token = jwt.sign({ userId: user._id }, jwtSecret, {
       expiresIn: '240h',
     });
 

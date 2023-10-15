@@ -2,16 +2,17 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const User = require('../models/userModel');
-
-// Create a new router
 const router = express.Router();
+
+require('dotenv').config();
+const jwtSecret = process.env.JWT_SECRET;
 
 // Define the Education Information Update route
 const updateEducation = async (req, res) => {
   try {
     // Verify the user's identity using the JWT token
     const token = req.headers.authorization.split(' ')[1];
-    const decoded = jwt.verify(token, 'scaleupkey');
+    const decoded = jwt.verify(token, jwtSecret);
 
     // Get the user's ID from the decoded token
     const userId = decoded.userId;

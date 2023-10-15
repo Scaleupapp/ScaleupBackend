@@ -3,11 +3,15 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/userModel');
 const UserSettings = require('../models/userSettingsModel');
 
+
+require('dotenv').config();
+const jwtSecret = process.env.JWT_SECRET;
+
 const changePassword = async (req, res) => {
   try {
     const { oldPassword, newPassword, confirmNewPassword } = req.body;
     const token = req.headers.authorization.split(' ')[1];
-    const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
+    const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
     const userId = decoded.userId;
 
     // Find the user by ID in the database
@@ -47,7 +51,7 @@ const updateCommentPrivileges = async (req, res) => {
   
       // Verify the user's identity using the JWT token
       const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
+      const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
       const userId = decoded.userId;
   
       // Find the user settings by user ID in the database

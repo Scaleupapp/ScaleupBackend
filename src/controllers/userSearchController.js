@@ -4,12 +4,15 @@ const Content = require('../models/contentModel');
 //const createNotification = require('../controllers/contentController').createNotification;
 const jwt = require('jsonwebtoken');
 
+require('dotenv').config();
+const jwtSecret = process.env.JWT_SECRET;
+
 // Controller function to search for users based on various criteria
 exports.searchUsers = async (req, res) => {
   try {
     // Check if a valid JWT token is present in the request headers
     const token = req.headers.authorization.split(' ')[1];
-    const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
+    const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
 
     // Get the user's ID from the decoded token
     const userId = decoded.userId;
@@ -83,7 +86,7 @@ exports.getUserDetails = async (req, res) => {
 
     // Check if a valid JWT token is present in the request headers
     const token = req.headers.authorization.split(' ')[1];
-    const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
+    const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
 
     // Get the user's ID from the decoded token
     const loggedUserId = decoded.userId;
@@ -177,7 +180,7 @@ exports.getUserDetails = async (req, res) => {
     
         // Get the logged-in user's user ID from the JWT token
         const token = req.headers.authorization.split(' ')[1];
-        const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
+        const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
         const followerUserId = decoded.userId;
     
         // Check if the user is trying to follow themselves
@@ -226,7 +229,7 @@ exports.getUserDetails = async (req, res) => {
   
       // Get the logged-in user's user ID from the JWT token
       const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
+      const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
       const followerUserId = decoded.userId;
   
       // Check if the user is trying to unfollow themselves
@@ -270,7 +273,7 @@ exports.getUserDetails = async (req, res) => {
     try {
       // Check if a valid JWT token is present in the request headers
       const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, 'scaleupkey'); // Replace with your actual secret key
+      const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
   
       // Get the user's ID from the decoded token
       const userId = decoded.userId;
