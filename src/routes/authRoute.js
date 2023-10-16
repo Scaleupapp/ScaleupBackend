@@ -19,5 +19,10 @@ router.post('/otp-gen', authController.loginWithOTP);
 //Verify OTP route
 router.post('/otp-verify', authController.verifyOTP);
 
+// Forgot Password  OTP route
+router.post('/password-gen', authController.forgotPassword);
+
+// Forgot Password & Reset   OTP route
+router.post('/resetpassword', authController.verifyOTPAndChangePassword);
 
 module.exports = router;

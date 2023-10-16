@@ -60,6 +60,10 @@ const contentSchema = new mongoose.Schema({
   smeComments: {
     type: String,
   },
+
+  contentType: {
+    type: String,
+  },
   smeVerify: {
     type: String,
     enum: ['NA', 'Pending', 'Accepted', 'Rejected'], // Enum values for NA, Pending, Accepted, and Rejected

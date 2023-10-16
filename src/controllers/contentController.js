@@ -12,9 +12,6 @@ require('dotenv').config();
 const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
 const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
 const awsRegion = process.env.AWS_REGION;
-const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
-const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
-const mongodbUri = process.env.MONGODB_URI;
 const jwtSecret = process.env.JWT_SECRET;
 
 aws.config.update({
@@ -75,6 +72,7 @@ exports.addContent = async (req, res) => {
         contentURL: data.Location, // Store S3 URL in the contentURL field
         userId: user._id ,// Link the content to the user who created it
         smeVerify: user.role === 'Subject Matter Expert' ? 'Accepted' : verify === 'Yes' ? 'Pending' : 'NA',
+        contentType : contentType,
        
 
       });
@@ -121,7 +119,7 @@ exports.listPendingVerificationContent = async (req, res) => {
                 { relatedTopics: { $in: userBioInterests } }, // Match related topics
             ],
         })
-            .select('username postdate relatedTopics hashtags _id captions heading contentURL rating smeVerify smeComments userId')
+            .select('username postdate relatedTopics hashtags _id captions heading contentURL rating smeVerify smeComments contentType userId')
             .populate('userId', 'username totalRating'); // Populate user data for content author
 
         res.json({ pendingContent });
@@ -227,6 +225,7 @@ exports.getContentDetails = async (req, res) => {
         rating: content.rating,
         smeVerify: content.smeVerify,
         smeComments: content.smeComments,
+        contentType: content.contentType,
       };
   
       res.json({ contentDetails });
@@ -275,8 +274,8 @@ exports.getContentDetails = async (req, res) => {
           },
         ],
       })
-        .select('username postdate heading hashtags relatedTopics captions contentURL likes comments smeVerify')
-        .populate('userId', 'username')
+        .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify')
+        .populate('userId','profilePicture username')
         .sort({ postdate: -1 }); // Sort by posting date in descending order
   
       // Fetch comments for each content item and add them to the result
@@ -495,6 +494,7 @@ exports.getPostDetails = async (req, res) => {
       contentURL: content.contentURL,
       likeCount: content.likeCount,
       CommentCount: content.CommentCount,
+      contentType: content.contentType,
 
     };
 
@@ -568,8 +568,8 @@ exports.getNotifications = async (req, res) => {
 
     // Query for content created by the users the logged-in user is following
     const homepageContent = await Content.find({ userId: { $in: followingUserIds } })
-      .select('username postdate heading hashtags relatedTopics captions contentURL likes comments smeVerify')
-      .populate('userId', 'username')
+      .select('username postdate heading hashtags relatedTopics captions contentURL likes comments  contentType smeVerify')
+      .populate('userId', 'profilePicture username')
       .sort({ postdate: -1 });
 
     // Fetch comments for each content item and add them to the result

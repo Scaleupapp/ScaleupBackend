@@ -7,9 +7,6 @@ require('dotenv').config();
 const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
 const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
 const awsRegion = process.env.AWS_REGION;
-const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
-const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
-const mongodbUri = process.env.MONGODB_URI;
 const jwtSecret = process.env.JWT_SECRET;
 
 // Configure AWS SDK with your credentials

@@ -6,6 +6,7 @@ const User = require('../models/userModel');
 const UserSettings = require('../models/userSettingsModel');
 const twilio = require('twilio'); // Import Twilio
 const router = express.Router();
+const nodemailer = require('nodemailer');
 
 require('dotenv').config();
 
@@ -13,6 +14,8 @@ require('dotenv').config();
 const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
 const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
 const jwtSecret = process.env.JWT_SECRET;
+const gmail = process.env.GMAIL_EMAIL;
+const gmailpassword =  process.env.GMAIL_PASSWORD;
 
 
 const twilioClient = twilio(
@@ -159,7 +162,7 @@ const loginWithOTP = async (req, res) => {
 
     // Send the OTP via SMS using Twilio
     await twilioClient.messages.create({
-      body: `Your Authentication OTP for ScaleUp: ${otp} . Please note that this OTP is valid for 5 minutes only.`,
+      body: `Your Authentication OTP for ScaleUp: ${otp} . Please note that this OTP is valid for 5 minutes only. In case you did not initiate this , please contact Customer Support`,
       from: '+12564884897', // Use your Twilio phone number
       to: phoneNumber,
     });
@@ -205,6 +208,109 @@ const verifyOTP = async (req, res) => {
   }
 };
 
+// Create a transporter for sending emails
+const transporter = nodemailer.createTransport({
+  service: 'Gmail',
+  auth: {
+    user: gmail, // Use the environment variable
+    pass: gmailpassword, // Use the environment variable
+  },
+});
+
+// Forgot Password route
+const forgotPassword = async (req, res) => {
+  const { loginIdentifier } = req.body;
+
+  try {
+    // Find the user by email, username, or phone number
+    const user = await User.findOne({
+      $or: [
+        { email: loginIdentifier },
+        { username: loginIdentifier },
+        { phoneNumber: loginIdentifier },
+      ],
+    });
+
+    // If the user doesn't exist, return an error
+    if (!user) {
+      return res.status(401).json({ message: 'User Not Found' });
+    }
+    // Generate a random OTP
+    let otp = generateRandomOTP(6); // Generate OTP for this request
+
+    let phoneNumber1= user.phoneNumber;
+    if (!user.phoneNumber.startsWith('+91')) {
+      phoneNumber1 = '+91' + user.phoneNumber;
+    }
+    else
+    phoneNumber1= user.phoneNumber;
+
+     // Send the OTP via SMS using Twilio
+     await twilioClient.messages.create({
+      body: `Please reset your password using OTP: ${otp} . Please note that this OTP is valid for 5 minutes only. In case you did not initiate this , please contact Customer Support`,
+      from: '+12564884897', // Use your Twilio phone number
+      to: phoneNumber1,
+    });
+
+    // Store the OTP in the user's document
+    user.forgotpasswordOTP = otp;
+    await user.save();
+
+    // Respond with a success message
+    res.status(200).json({ message: 'OTP sent successfully' });
+ 
+
+
+  } catch (error) {
+    console.error('Error during forgot password:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+const verifyOTPAndChangePassword = async (req, res) => {
+  const { loginIdentifier, otp, newPassword } = req.body;
+
+  try {
+    // Find the user by email, username, or phone number
+    const user = await User.findOne({
+      $or: [
+        { email: loginIdentifier },
+        { username: loginIdentifier },
+        { phoneNumber: loginIdentifier },
+      ],
+    });
+
+    // If the user doesn't exist, return an error
+    if (!user) {
+      return res.status(401).json({ message: 'User Not Found' });
+    }
+
+    // Check if the entered OTP matches the stored OTP
+    if (otp !== user.forgotpasswordOTP) {
+      return res.status(401).json({ message: 'Invalid OTP' });
+    }
+
+// Hash the new password
+const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+
+     // Update the user's password in the database
+     user.password = hashedPassword;
+
+    // Clear the stored OTP and its expiration time
+    user.forgotpasswordOTP = undefined;
+
+    // Save the updated user document
+    await user.save();
+
+    // Respond with a success message
+    res.status(200).json({ message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Error during OTP verification and password change:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 
 
 module.exports = {
@@ -213,4 +319,6 @@ module.exports = {
   signout,
   loginWithOTP,
   verifyOTP,
+  forgotPassword,
+  verifyOTPAndChangePassword
 };

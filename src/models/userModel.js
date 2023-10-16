@@ -108,6 +108,10 @@ loginOtp: {
   type: String,
 },
 
+forgotpasswordOTP: {
+  type: String,
+},
+
 // Reference to UserSettings
 userSettings: {
   type: mongoose.Schema.Types.ObjectId,

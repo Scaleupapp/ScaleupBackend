@@ -6,9 +6,6 @@ require('dotenv').config();
 const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
 const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
 const awsRegion = process.env.AWS_REGION;
-const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
-const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
-const mongodbUri = process.env.MONGODB_URI;
 const jwtSecret = process.env.JWT_SECRET;
 
 // Configure AWS SDK with your credentials
@@ -25,7 +22,7 @@ const updateCertifications = async (req, res) => {
   try {
     // Verify the user's identity using the JWT token
     const token = req.headers.authorization.split(' ')[1];
-    const decoded = jwt.verify(token, 'scaleupkey');
+    const decoded = jwt.verify(token, jwtSecret);
 
     // Get the user's ID from the decoded token
     const userId = decoded.userId;
