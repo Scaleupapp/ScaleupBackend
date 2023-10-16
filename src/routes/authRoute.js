@@ -25,4 +25,6 @@ router.post('/password-gen', authController.forgotPassword);
 // Forgot Password & Reset   OTP route
 router.post('/resetpassword', authController.verifyOTPAndChangePassword);
 
+
+
 module.exports = router;
