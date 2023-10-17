@@ -183,7 +183,15 @@ exports.updateContentRatingAndVerification = async (req, res) => {
                 contentAuthor.badges = 'Explorer';
             }
 
-            await contentAuthor.save();
+            // Don't create a notification if the user is liking their own content
+      const recipientId = content.userId; // The user who owns the content
+      const senderId = userId; 
+      const type = 'Content Validation '; // Notification type
+      const notificationContent = `SME has ${smeVerify} your post.`; // Notification content
+      const link = `/api/content/post/${contentId}`; // Link to the liked post
+
+      await createNotification(recipientId, senderId, type, notificationContent, link);
+     await contentAuthor.save();
         }
 
         res.json({ message: 'Content rating and verification updated successfully' });
@@ -448,7 +456,6 @@ exports.likeContent = async (req, res) => {
           const notificationContent = `${user.username} commented on your post.`; // Notification content
           const link = `/api/content/post/${contentId}`; // Link to the commented post
   
-          // Use a different variable name for notification content
           await createNotification(recipientId, senderId, type, notificationContent, link);
         }
   
@@ -505,7 +512,6 @@ exports.getPostDetails = async (req, res) => {
   }
 };
 
-// Function to create and save a new notification
 async function createNotification(recipientId, senderId, type, content, link) {
   const newNotification = new Notification({
     recipient: recipientId,
@@ -516,7 +522,8 @@ async function createNotification(recipientId, senderId, type, content, link) {
   });
 
   await newNotification.save();
-};
+}
+
 
 // Controller function to retrieve notifications for the logged-in user
 exports.getNotifications = async (req, res) => {
