@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const Content = require('../models/contentModel');
 //const createNotification = require('../controllers/contentController').createNotification;
 const jwt = require('jsonwebtoken');
+const { createNotification } = require('../controllers/contentController'); 
 
 require('dotenv').config();
 const jwtSecret = process.env.JWT_SECRET;
@@ -197,7 +198,9 @@ exports.getUserDetails = async (req, res) => {
     
         // Find the logged-in user by their user ID
         const user = await User.findById(followerUserId);
-    
+        
+        const followerUser =await User.findById(followerUserId);
+
         // Check if the user is already following the target user
         if (user.following.includes(targetUser.username)) {
           return res.status(400).json({ message: 'You are already following this user' });
@@ -212,8 +215,15 @@ exports.getUserDetails = async (req, res) => {
         targetUser.followers.push(user.username);
         targetUser.followersCount += 1;
         await targetUser.save();
+
+        const recipientId = targetUser.userId; 
+        const senderId = followerUserId; 
+        const type = 'Follow'; // Notification type
+        const notificationContent = ` ${followerUser.username} followed you .`; // Notification content
+        const link = `/api/content/detail/${followerUserId}`; // Link to the liked post
+  
+       // await createNotification(recipientId, senderId, type, notificationContent, link);
     
-       // createNotification(followerUserId, targetUserId, 'follow',null);
         res.status(200).json({ message: 'You are now following this user' });
       } catch (error) {
         console.error('Error following user:', error);
