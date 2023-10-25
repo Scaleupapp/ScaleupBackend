@@ -59,7 +59,7 @@ const updateCommentPrivileges = async (req, res) => {
       if (!userSettings) {
         return res.status(404).json({ message: 'User settings not found' });
       }
-  
+      
       // Update the user's comment privileges
       userSettings.commentPrivacy = commentPrivileges;
       await userSettings.save();

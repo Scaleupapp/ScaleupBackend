@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const Content = require('../models/contentModel');
 //const createNotification = require('../controllers/contentController').createNotification;
 const jwt = require('jsonwebtoken');
-const { createNotification } = require('../controllers/contentController'); 
+const {createNotification }  = require('../controllers/contentController'); 
 
 require('dotenv').config();
 const jwtSecret = process.env.JWT_SECRET;
@@ -222,7 +222,7 @@ exports.getUserDetails = async (req, res) => {
         const notificationContent = ` ${followerUser.username} followed you .`; // Notification content
         const link = `/api/content/detail/${followerUserId}`; // Link to the liked post
   
-       // await createNotification(recipientId, senderId, type, notificationContent, link);
+     //  await createNotification(recipientId, senderId, type, notificationContent, link);
     
         res.status(200).json({ message: 'You are now following this user' });
       } catch (error) {
