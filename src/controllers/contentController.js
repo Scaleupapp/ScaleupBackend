@@ -24,7 +24,7 @@ const s3 = new aws.S3();
 
 exports.addContent = async (req, res) => {
   try {
-    const { captions, hashtags, heading, verify, relatedTopics } = req.body;
+    const { captions, hashtags, heading, verify, relatedTopics, contentType } = req.body;
     const contentFile = req.file;
 
     // Verify the user's identity using the JWT token
@@ -288,7 +288,7 @@ exports.getContentDetails = async (req, res) => {
   
       // Fetch comments for each content item and add them to the result
       const contentWithComments = [];
-      for (const contentItem of homepageContent) {
+      for (const contentItem of filteredContent) {
         const comments = await Comment.find({ contentId: contentItem._id })
           .populate('userId', 'profilePicture username'); // Populate user details for comments
         contentWithComments.push({ ...contentItem.toObject(), comments });
