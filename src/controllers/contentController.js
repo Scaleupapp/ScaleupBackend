@@ -288,10 +288,12 @@ exports.getContentDetails = async (req, res) => {
   
       // Fetch comments for each content item and add them to the result
       const contentWithComments = [];
-      for (const contentItem of filteredContent) {
-        const comments = await Comment.find({ contentId: contentItem._id });
+      for (const contentItem of homepageContent) {
+        const comments = await Comment.find({ contentId: contentItem._id })
+          .populate('userId', 'profilePicture username'); // Populate user details for comments
         contentWithComments.push({ ...contentItem.toObject(), comments });
       }
+  
   
       // Add a "Verified" tag to content with smeVerify = "Accepted"
       const contentWithVerification = contentWithComments.map(content => ({
@@ -587,12 +589,6 @@ exports.getNotifications = async (req, res) => {
       contentWithComments.push({ ...contentItem.toObject(), comments });
     }
 
-    // Fetch comments for each content item and add them to the result
-  //  const contentWithComments = [];
-    //for (const contentItem of homepageContent) {
-      //const comments = await Comment.find({ contentId: contentItem._id });
-      //contentWithComments.push({ ...contentItem.toObject(), comments });
-   // }
 
     // Add a "Verified" tag to content with smeVerify = "Accepted"
     const contentWithVerification = contentWithComments.map(content => ({
