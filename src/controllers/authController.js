@@ -50,8 +50,14 @@ const login = async (req, res) => {
       // Create a JWT token for session management (customize as needed)
       const token = jwt.sign({ userId: user._id }, jwtSecret, {
         expiresIn: '240h',
-      });
+      }
+      );
 
+      if(user.isFirstTimeLogin)
+      {
+        user.isFirstTimeLogin=false;
+        await user.save();
+      }
       // Return a success message and the token
       res.json({ message: 'Login successful', token });
     } else {

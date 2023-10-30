@@ -118,6 +118,19 @@ userSettings: {
   ref: 'UserSettings',
 },
 
+devicetype: {
+  type: String,
+},
+
+
+devicetoken: {
+  type: String,
+},
+
+isFirstTimeLogin: {
+  type: Boolean,
+  default: true,
+},
 
 },
 
