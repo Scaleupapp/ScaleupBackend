@@ -202,6 +202,11 @@ const verifyOTP = async (req, res) => {
     const token = jwt.sign({ userId: user._id }, jwtSecret, {
       expiresIn: '240h',
     });
+    if(user.isFirstTimeLogin)
+    {
+      user.isFirstTimeLogin=false;
+      await user.save();
+    }
 
     // Remove the login OTP from the user document
     user.loginOtp = undefined;
