@@ -32,6 +32,8 @@ exports.searchUsers = async (req, res) => {
     const usersWhoBlockedLoggedInUser = await User.find({ blockedUsers: userId });
     const usersWhoBlockedLoggedInUserIds = usersWhoBlockedLoggedInUser.map(user => user._id);
 
+    // Get the list of user IDs that the logged-in user is following
+    const followingUserIds = loggedInUser.following || [];
 
     // Search users based on multiple fields and exclude blocked users
     const searchResults = await User.find({
@@ -57,6 +59,9 @@ exports.searchUsers = async (req, res) => {
 
     for (const user of searchResults) {
       const totalPosts = await Content.countDocuments({ userId: user._id });
+      // Check if the logged-in user is following the searched user
+      const isFollowing = followingUserIds.includes(user.username);
+
       formattedResults.push({
         profilePicture: user.profilePicture,
         username: user.username,
@@ -67,6 +72,7 @@ exports.searchUsers = async (req, res) => {
         followingCount: user.followingCount,
         totalPosts,
         userId: user._id,
+        isFollowing,
       });
     }
 
@@ -125,6 +131,13 @@ exports.getUserDetails = async (req, res) => {
 
     const totalPosts = await Content.countDocuments({ userId: user._id });
 
+    // Get the list of user IDs that the logged-in user is following
+    const followingUserIds = loggedInUser.following || [];
+
+    // Check if the logged-in user is following the user whose details are being fetched
+    const isFollowing = followingUserIds.includes(user.username);
+
+
     // Format the user details
     const formattedUser = {
       profilePicture: user.profilePicture,
@@ -149,6 +162,7 @@ exports.getUserDetails = async (req, res) => {
       followers: user.followers,
       followingCount: user.followingCount,
       following: user.following,
+      isFollowing,
       content: userContent.map(content => ({
         heading: content.heading,
         captions: content.captions,
