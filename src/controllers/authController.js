@@ -58,8 +58,9 @@ const login = async (req, res) => {
         user.isFirstTimeLogin=false;
         await user.save();
       }
+      const isFirstTimeLogin1 = user.isFirstTimeLogin;
       // Return a success message and the token
-      res.json({ message: 'Login successful', token });
+      res.json({ message: 'Login successful', token ,isFirstTimeLogin1 });
     } else {
       // Password is incorrect
       res.status(401).json({ message: 'Incorrect Password' });
@@ -207,12 +208,12 @@ const verifyOTP = async (req, res) => {
       user.isFirstTimeLogin=false;
       await user.save();
     }
-
+    const isFirstTimeLogin1 = user.isFirstTimeLogin;
     // Remove the login OTP from the user document
     user.loginOtp = undefined;
     await user.save();
 
-    res.json({ message: 'Login successful', token });
+    res.json({ message: 'Login successful', token,isFirstTimeLogin1 });
   } catch (error) {
     console.error('OTP verification error:', error);
     res.status(500).json({ message: 'Internal server error' });
