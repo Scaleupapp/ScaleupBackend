@@ -539,7 +539,7 @@ exports.getNotifications = async (req, res) => {
     const userId = decoded.userId;
 
     // Query the database for notifications for the user
-    const notifications = await Notification.find({ recipient: userId })
+    const notifications = await Notification.find({ recipient: userId , isRead: false })
       .sort({ createdAt: -1 }) // Sort by most recent first
       .limit(10); // Limit the number of notifications to retrieve
 
@@ -549,6 +549,47 @@ exports.getNotifications = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+exports.markNotificationsAsRead = async (req, res) => {
+  try {
+    // Check if the 'Authorization' header is present in the request
+    if (!req.headers.authorization) {
+      return res.status(401).json({ error: 'Authorization header missing' });
+    }
+
+    // Get the JWT token from the request headers
+    const token = req.headers.authorization.split(' ')[1];
+
+    // Verify the token to get the user's ID
+    const decoded = jwt.verify(token, jwtSecret); // Replace 'your-secret-key' with your actual secret key
+
+    // Get the user's ID from the decoded token
+    const userId = decoded.userId;
+
+    // Extract the notification IDs from the request body
+    const { notificationIds } = req.body;
+
+    if (!notificationIds || !notificationIds.length) {
+      return res.status(400).json({ error: 'No notification IDs provided' });
+    }
+
+    // Update the notifications to mark them as read
+    await Notification.updateMany(
+      {
+        _id: { $in: notificationIds },
+        recipient: userId,
+      },
+      { $set: { isRead: true } }
+    );
+
+    res.json({ message: 'Notifications marked as read' });
+  } catch (error) {
+    console.error('Error marking notifications as read:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+
 
  exports.getHomepageContent = async (req, res) => {
   try {
