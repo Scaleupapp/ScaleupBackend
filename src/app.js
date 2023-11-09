@@ -9,6 +9,7 @@ const authRoute = require('./routes/authRoute');
 const contentRoute = require('./routes/contentRoutes');
 const cors = require('cors');
 const twilio = require('twilio');
+const chatRouter = require('./routes/chatRoute');
 require('dotenv').config();
 
 
@@ -21,7 +22,7 @@ const mongodbUri = process.env.MONGODB_URI;
 const jwtSecret = process.env.JWT_SECRET;
 
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 4000;
 
 // Configure AWS SDK with your credentials
 aws.config.update({
@@ -58,6 +59,7 @@ mongoose
 app.use('/api/auth', authRoute); // Use the auth route
 app.use('/api/users', userRoute); // Use the user route
 app.use('/api/content', contentRoute);
+app.use('/api/chat',chatRouter)
 
 // Start the server
 app.listen(PORT, () => {
