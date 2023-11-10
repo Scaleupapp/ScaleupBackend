@@ -21,7 +21,7 @@ const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
 const mongodbUri = process.env.MONGODB_URI;
 const jwtSecret = process.env.JWT_SECRET;
 
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 3000;
 
 // Configure AWS SDK with your credentials
 aws.config.update({
