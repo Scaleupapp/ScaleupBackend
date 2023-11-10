@@ -20,7 +20,7 @@ const twilioClient = twilio(twilioAccountSid, twilioAuthToken);
 
 // Login route
 const login = async (req, res) => {
-  const { loginIdentifier, password } = req.body;
+  const { loginIdentifier, password ,devicetoken} = req.body;
 
   try {
     // Find the user by email, username, or phone number
@@ -44,11 +44,14 @@ const login = async (req, res) => {
       // Password is correct
       // Create a JWT token for session management (customize as needed)
       const token = jwt.sign({ userId: user._id }, jwtSecret, {
-        expiresIn: "240h",
-      });
-
-      if (user.isFirstTimeLogin) {
-        user.isFirstTimeLogin = false;
+        expiresIn: '240h',
+      }
+      );
+      user.devicetoken=devicetoken;
+      await user.save();
+      if(user.isFirstTimeLogin)
+      {
+        user.isFirstTimeLogin=false;
         await user.save();
       }
       const isFirstTimeLogin1 = user.isFirstTimeLogin;
@@ -175,7 +178,7 @@ const loginWithOTP = async (req, res) => {
 };
 
 const verifyOTP = async (req, res) => {
-  const { phoneNumber, userOTP } = req.body;
+  const { phoneNumber, userOTP,devicetoken } = req.body;
 
   try {
     // Find the user by phone number
@@ -197,6 +200,7 @@ const verifyOTP = async (req, res) => {
     const isFirstTimeLogin1 = user.isFirstTimeLogin;
     // Remove the login OTP from the user document
     user.loginOtp = undefined;
+    user.devicetoken=devicetoken;
     await user.save();
 
     res.json({ message: "Login successful", token, isFirstTimeLogin1 });

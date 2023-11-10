@@ -254,7 +254,7 @@ if (!user) {
 
     // Add the target user to the logged-in user's blockedUsers array
     await User.findByIdAndUpdate(userId, { $addToSet: { blockedUsers: targetUserId } });
-
+  if(user.following.includes(targetUser.username)){
     // Remove the target user from the logged-in user's followers and following lists
     await User.findByIdAndUpdate(userId, { $pull: { following: targetUser.username } });
     await User.findByIdAndUpdate(targetUserId, { $pull: { followers: user.username } });
@@ -263,9 +263,47 @@ if (!user) {
     await User.findByIdAndUpdate(userId, { $inc: { followingCount: -1} });
     await User.findByIdAndUpdate(targetUserId, { $inc: { followersCount: -1 } });
 
+  }
+  if( targetUser.following.includes(user.username)){
+    await User.findByIdAndUpdate(userId, { $pull: { followers: targetUser.username } });
+    await User.findByIdAndUpdate(targetUserId, { $pull: { following: user.username } });
+    await User.findByIdAndUpdate(userId, { $inc: { followersCount: -1} });
+    await User.findByIdAndUpdate(targetUserId, { $inc: { followingCount: -1 } });
+
+  }
+
     res.json({ message: 'User blocked successfully' });
   } catch (error) {
     console.error('Error blocking user:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+const getBlockedUsers = async (req, res) => {
+  try {
+    // Verify the user's identity using the JWT token
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret); 
+
+    // Get the user's ID from the decoded token
+    const userId = decoded.userId;
+
+    // Find the user by ID in the database
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Get the list of blocked user IDs
+    const blockedUserIds = user.blockedUsers || [];
+
+    // Fetch the blocked users' details
+    const blockedUsers = await User.find({ _id: { $in: blockedUserIds } })
+      .select('profilePicture username'); 
+
+    res.status(200).json(blockedUsers);
+  } catch (error) {
+    console.error('Error fetching blocked users:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -307,4 +345,5 @@ module.exports = {
   deleteCertification,
   blockUser,
   unblockUser,
+  getBlockedUsers,
 };

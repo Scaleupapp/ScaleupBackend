@@ -59,4 +59,8 @@ router.post('/change-password', settingsController.changePassword);
 //Change comments visibility route
 router.post('/updateCommentPrivileges', settingsController.updateCommentPrivileges);
 
+// Route for fetching blocked users
+router.get('/blocked-users', userController.getBlockedUsers);
+
+
 module.exports = router;

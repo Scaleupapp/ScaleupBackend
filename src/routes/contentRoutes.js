@@ -58,8 +58,8 @@ router.post('/createstory', upload.single('contentFile'), storyController.addSto
 // Define a route for getting homepage content
 router.get('/homepage', contentController.getHomepageContent);
 
-// Route for marking a single notification as read
-//router.post('/notifications/:id/mark-as-read', contentController.markAsRead);
+// Route for marking  notification as read
+router.post('/notifications/mark-as-read', contentController.markNotificationsAsRead);
 
 
 module.exports = router;
