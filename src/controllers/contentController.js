@@ -628,7 +628,10 @@ exports.markNotificationsAsRead = async (req, res) => {
      .sort({ postdate: -1 });
 
      // Combine the content from followed users and the logged-in user
-    const homepageContent = followedUsersContent.concat(loggedInUserContent);
+    const allContent = [...followedUsersContent, ...loggedInUserContent];
+
+    // Sort all content by postdate in descending order
+    const homepageContent = allContent.sort((a, b) => b.postdate - a.postdate);
 
       // Fetch comments for each content item and add them to the result
     const contentWithComments = [];
