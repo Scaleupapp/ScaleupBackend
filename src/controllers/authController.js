@@ -3,6 +3,8 @@ const express = require("express");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const User = require("../models/userModel");
+const Content = require("../models/contentModel");
+const Comment = require("../models/commentModel");
 const UserSettings = require("../models/userSettingsModel");
 const twilio = require("twilio"); // Import Twilio
 const router = express.Router();
@@ -307,6 +309,71 @@ const verifyOTPAndChangePassword = async (req, res) => {
   }
 };
 
+const deleteAccount = async (req, res) => {
+  try {
+    const { password } = req.body;
+
+    // Verify the user's identity using the JWT token
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret);
+
+    // Get the user's ID from the decoded token
+    const userId = decoded.userId;
+
+    // Find the user by ID
+    const user = await User.findById(userId);
+
+    // If the user doesn't exist, return an error
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid User Credentials' });
+    }
+
+    // Compare the user-entered password with the stored hashed password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (isPasswordValid) {
+      // Password is correct
+
+      // Step 1: Delete user's content
+      await Content.deleteMany({ userId: user._id });
+
+      // Step 2: Update follower and following arrays of other users
+      const followers = await User.find({ following: user.username });
+      const following = await User.find({ followers: user.username });
+
+      await Promise.all([
+        ...followers.map(async (follower) => {
+          follower.following.pull(user.username);
+          await follower.save();
+        }),
+        ...following.map(async (followedUser) => {
+          followedUser.followers.pull(user.username);
+          await followedUser.save();
+        }),
+      ]);
+
+      // Step 3: Update follower and following counts
+      await User.updateMany(
+        { _id: { $in: [...followers.map((follower) => follower._id), ...following.map((followedUser) => followedUser._id)] } },
+        { $inc: { followersCount: -1, followingCount: -1 } }
+      );
+
+      // Step 4: Delete the user's data from the User model
+      await User.deleteOne({ _id: user._id });
+
+      // Send a success response
+      return res.status(200).json({ message: 'Account deleted successfully' });
+    } else {
+      // Password is incorrect
+      return res.status(401).json({ message: 'Incorrect Password' });
+    }
+  } catch (error) {
+    console.error('Error during account deletion:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+
 module.exports = {
   login,
   register,
@@ -315,4 +382,5 @@ module.exports = {
   verifyOTP,
   forgotPassword,
   verifyOTPAndChangePassword,
+  deleteAccount,
 };

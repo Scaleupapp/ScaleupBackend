@@ -25,6 +25,10 @@ router.post('/password-gen', authController.forgotPassword);
 // Forgot Password & Reset   OTP route
 router.post('/resetpassword', authController.verifyOTPAndChangePassword);
 
+// Delete Account route (add this route)
+router.post('/delete-account', authController.deleteAccount);
+
+
 
 
 module.exports = router;
