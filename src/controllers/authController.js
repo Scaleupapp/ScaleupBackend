@@ -197,17 +197,18 @@ const verifyOTP = async (req, res) => {
     const token = jwt.sign({ userId: user._id }, jwtSecret, {
       expiresIn: "240h",
     });
+    const isFirstTimeLogin1 = user.isFirstTimeLogin;
     if (user.isFirstTimeLogin) {
       user.isFirstTimeLogin = false;
       await user.save();
     }
-    const isFirstTimeLogin1 = user.isFirstTimeLogin;
+    
     // Remove the login OTP from the user document
     user.loginOtp = undefined;
     user.devicetoken=devicetoken;
     await user.save();
 
-    res.json({ message: "Login successful", token, isFirstTimeLogin1 });
+    res.json({ message: "Login successful", token, isFirstTimeLogin1});
   } catch (error) {
     console.error("OTP verification error:", error);
     res.status(500).json({ message: "Internal server error" });
