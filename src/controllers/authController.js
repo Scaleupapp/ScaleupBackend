@@ -51,12 +51,14 @@ const login = async (req, res) => {
       );
       user.devicetoken=devicetoken;
       await user.save();
+
+      const isFirstTimeLogin1 = user.isFirstTimeLogin;
       if(user.isFirstTimeLogin)
       {
         user.isFirstTimeLogin=false;
         await user.save();
       }
-      const isFirstTimeLogin1 = user.isFirstTimeLogin;
+      
       // Return a success message and the token
       res.json({
         message: "Login successful",
