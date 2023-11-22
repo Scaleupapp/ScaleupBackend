@@ -67,13 +67,6 @@ const contentSchema = new mongoose.Schema({
   smeVerify: {
     type: String,
     enum: ['NA', 'Pending', 'Accepted', 'Rejected'], // Enum values for NA, Pending, Accepted, and Rejected
-    default: function () {
-      // Default value based on the existing verify field
-      if (this.verify === 'Yes') {
-        return 'Pending';
-      }
-      return 'NA';
-    },
   },
 });
 
