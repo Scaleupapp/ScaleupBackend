@@ -25,11 +25,11 @@ const login = async (req, res) => {
   const { loginIdentifier, password ,devicetoken} = req.body;
 
   try {
-    // Find the user by email, username, or phone number
+    // Find the user by email, username, or phone number (case-insensitive)
     const user = await User.findOne({
       $or: [
-        { email: loginIdentifier },
-        { username: loginIdentifier },
+        { email: { $regex: new RegExp(`^${loginIdentifier}$`, 'i') } },
+        { username: { $regex: new RegExp(`^${loginIdentifier}$`, 'i') } },
         { phoneNumber: loginIdentifier },
       ],
     });
@@ -86,8 +86,12 @@ const register = async (req, res) => {
     req.body;
 
   try {
-    // Check if the user already exists with the same email or username
-    const existingUser = await User.findOne({ $or: [{ email }, { username }, { phoneNumber }] });
+    // Normalize email and username to lowercase
+    const normalizedEmail = email.toLowerCase();
+    const normalizedUsername = username.toLowerCase();
+
+    // Check if the user already exists with the normalized email or username
+    const existingUser = await User.findOne({ $or: [{ email: normalizedEmail }, { username: normalizedUsername }, { phoneNumber }] });
 
     if (existingUser) {
       return res.status(400).json({ message: "User already exists" });
@@ -96,10 +100,10 @@ const register = async (req, res) => {
     // Hash the user's password before saving it in the database
     const hashedPassword = await bcrypt.hash(password, 10); // You can adjust the number of salt rounds
 
-    // Create a new user instance
+    // Create a new user instance with normalized email and username
     const newUser = new User({
-      username,
-      email,
+      username: normalizedUsername,
+      email: normalizedEmail,
       password: hashedPassword,
       firstname: firstname,
       lastname: lastname,
