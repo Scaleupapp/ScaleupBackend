@@ -11,6 +11,7 @@ const cors = require("cors");
 const twilio = require("twilio");
 const chatRouter = require("./routes/chatRoute");
 const conversationRouter = require("./routes/conversationRoute");
+const Sentry = require("@sentry/node");
 require("dotenv").config();
 
 const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
@@ -31,9 +32,28 @@ aws.config.update({
 });
 
 const twilioClient = twilio(twilioAccountSid, twilioAuthToken);
+Sentry.init({
+  dsn: "https://70a3fa133c98e18ff07f83ec9eb6e281@o4506403653222400.ingest.sentry.io/4506404787781632",
+  integrations: [
+    // enable HTTP calls tracing
+    new Sentry.Integrations.Http({ tracing: true }),
+    // enable Express.js middleware tracing
+    new Sentry.Integrations.Express({ app }),
+    
+  ],
+  // Performance Monitoring
+  tracesSampleRate: 1.0, //  Capture 100% of the transactions
+  // Set sampling rate for profiling - this is relative to tracesSampleRate
+  profilesSampleRate: 1.0,
+});
 
 app.use(bodyParser.json());
 app.use(cors());
+app.use((err, req, res, next) => {
+  Sentry.captureException(err);
+  res.status(500).json({ message: "Something went wrong." });
+});
+
 
 app.set("view engine", "ejs");
 

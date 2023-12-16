@@ -1,6 +1,7 @@
 const User = require('../models/userModel');
 const jwt = require('jsonwebtoken');
 const aws = require('aws-sdk');
+const Sentry = require('@sentry/node');
 
 require('dotenv').config();
 const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
@@ -53,6 +54,7 @@ const updateCertifications = async (req, res) => {
     // Return the updated user object as a response
     res.json({ message: 'Certifications information updated successfully', user });
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Error updating certifications information:', error);
     res.status(500).json({ message: 'Internal server error' });
   }

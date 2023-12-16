@@ -2,6 +2,7 @@ const Story = require('../models/storyModel');
 const jwt = require('jsonwebtoken');
 const aws = require('aws-sdk');
 const multer = require('multer');
+const Sentry = require('@sentry/node'); 
 
 require('dotenv').config();
 
@@ -64,6 +65,7 @@ exports.addStory = upload.single('contentFile'), async (req, res) => {
       res.status(201).json({ message: 'Story posted successfully' });
     });
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Error posting Story:', error);
     res.status(500).json({ error: 'Internal server error' });
   }

@@ -5,7 +5,7 @@ const Comment = require('../models/commentModel'); // Import the Comment model
 const Notification = require('../models/notificationModel'); // Import the Notification model
 const UserSettings = require('../models/userSettingsModel'); // Import the UserSettings model
 const jwt = require('jsonwebtoken'); // Import JWT library
-
+const Sentry = require('@sentry/node');
 require('dotenv').config();
 
 
@@ -82,6 +82,7 @@ exports.addContent = async (req, res) => {
       return res.status(200).json({ message: 'Content added successfully' });
     });
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Content creation error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -124,6 +125,7 @@ exports.listPendingVerificationContent = async (req, res) => {
 
         res.json({ pendingContent });
     } catch (error) {
+      Sentry.captureException(error);
         console.error('Error listing pending content:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
@@ -196,6 +198,7 @@ exports.updateContentRatingAndVerification = async (req, res) => {
 
         res.json({ message: 'Content rating and verification updated successfully' });
     } catch (error) {
+      Sentry.captureException(error);
         console.error('Content rating and verification update error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
@@ -238,6 +241,7 @@ exports.getContentDetails = async (req, res) => {
   
       res.json({ contentDetails });
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error getting content details:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
@@ -303,6 +307,7 @@ exports.getContentDetails = async (req, res) => {
   
       res.json({ content: contentWithVerification });
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error getting filtered content:', error);
       res.status(500).json({ message: 'Internal server error' });
     }
@@ -352,6 +357,7 @@ exports.likeContent = async (req, res) => {
     // Return the updated likeCount
     res.json({ likeCount: updatedContent.likeCount });
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Error liking content:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -386,6 +392,7 @@ exports.likeContent = async (req, res) => {
       // Return the updated likeCount
       res.json({ likeCount: content.likeCount });
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error unliking content:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
@@ -466,6 +473,7 @@ exports.addComment = async (req, res) => {
       res.status(403).json({ error: 'You do not have the necessary privileges to comment on this content' });
     }
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Comment creation error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -509,6 +517,7 @@ exports.getPostDetails = async (req, res) => {
 
     res.json({ contentDetails });
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Error getting content details:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -545,6 +554,7 @@ exports.getNotifications = async (req, res) => {
 
     res.json(notifications);
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Error fetching notifications:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -584,6 +594,7 @@ exports.markNotificationsAsRead = async (req, res) => {
 
     res.json({ message: 'Notifications marked as read' });
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Error marking notifications as read:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -650,6 +661,7 @@ exports.markNotificationsAsRead = async (req, res) => {
 
     res.json({ content: contentWithVerification });
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Error getting homepage content:', error);
     res.status(500).json({ message: 'Internal server error' });
   }

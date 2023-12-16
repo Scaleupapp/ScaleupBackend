@@ -1,6 +1,7 @@
 // src/routes/authRoute.js
 const express = require('express');
 const authController = require('../controllers/authController');
+const Sentry = require("@sentry/node");
 
 const router = express.Router();
 
@@ -28,7 +29,7 @@ router.post('/resetpassword', authController.verifyOTPAndChangePassword);
 // Delete Account route (add this route)
 router.post('/delete-account', authController.deleteAccount);
 
-
-
+// Add a route for testing Sentry integration
+router.get("/test-sentry", authController.testSentry);
 
 module.exports = router;

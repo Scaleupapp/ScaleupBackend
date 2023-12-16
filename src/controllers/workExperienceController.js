@@ -1,6 +1,7 @@
 const User = require('../models/userModel');
 const jwt = require('jsonwebtoken');
 const aws = require('aws-sdk');
+const Sentry = require('@sentry/node');
 
 require('dotenv').config();
 
@@ -81,6 +82,7 @@ const updateWorkExperience = async (req, res) => {
     // Return the updated user object as a response
     res.json({ message: 'Work experience information updated successfully', user });
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Error updating work experience information:', error);
     res.status(500).json({ message: 'Internal server error' });
   }

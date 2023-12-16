@@ -3,6 +3,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const User = require('../models/userModel');
 const router = express.Router();
+const Sentry = require('@sentry/node');
 
 require('dotenv').config();
 const jwtSecret = process.env.JWT_SECRET;
@@ -44,6 +45,7 @@ const updateEducation = async (req, res) => {
     // Return the updated user object as a response
     res.json({ message: 'Education information updated successfully', user });
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Error updating education information:', error);
     res.status(500).json({ message: 'Internal server error' });
   }

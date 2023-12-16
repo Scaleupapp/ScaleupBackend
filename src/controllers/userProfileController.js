@@ -3,6 +3,7 @@ const Content = require('../models/contentModel'); // Import the Content model
 const Comment = require('../models/commentModel'); // Import the Comment model
 const jwt = require('jsonwebtoken');
 const aws = require('aws-sdk');
+const Sentry = require('@sentry/node');
 
 require('dotenv').config();
 
@@ -59,6 +60,7 @@ const getUserProfile = async (req, res) => {
     // Return the user's profile information along with their posted content and comments
     res.json({ user, userContent: userContentWithComments });
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Error getting user profile:', error);
     res.status(500).json({ message: 'Internal server error' });
   }

@@ -9,6 +9,7 @@ const UserSettings = require("../models/userSettingsModel");
 const twilio = require("twilio"); // Import Twilio
 const router = express.Router();
 const nodemailer = require("nodemailer");
+const Sentry = require("@sentry/node");
 
 require("dotenv").config();
 
@@ -71,6 +72,7 @@ const login = async (req, res) => {
       res.status(401).json({ message: "Incorrect Password" });
     }
   } catch (error) {
+    Sentry.captureException(error);
     console.error("Error during login:", error);
     res.status(500).json({ message: "Internal server error" });
   }
@@ -122,6 +124,7 @@ const register = async (req, res) => {
     // Return a success message
     res.json({ message: "Registration successful" });
   } catch (error) {
+    Sentry.captureException(error);
     console.error("Error during registration:", error);
     res.status(500).json({ message: "Internal server error" });
   }
@@ -180,6 +183,7 @@ const loginWithOTP = async (req, res) => {
     // Respond with a success message
     res.status(200).json({ message: "OTP sent successfully" });
   } catch (error) {
+    Sentry.captureException(error);
     console.error("OTP generation and sending error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
@@ -214,6 +218,7 @@ const verifyOTP = async (req, res) => {
 
     res.json({ message: "Login successful", token, isFirstTimeLogin1});
   } catch (error) {
+    Sentry.captureException(error);
     console.error("OTP verification error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
@@ -268,6 +273,7 @@ const forgotPassword = async (req, res) => {
     // Respond with a success message
     res.status(200).json({ message: "OTP sent successfully" });
   } catch (error) {
+    Sentry.captureException(error);
     console.error("Error during forgot password:", error);
     res.status(500).json({ message: "Internal server error" });
   }
@@ -311,6 +317,7 @@ const verifyOTPAndChangePassword = async (req, res) => {
     // Respond with a success message
     res.status(200).json({ message: "Password changed successfully" });
   } catch (error) {
+    Sentry.captureException(error);
     console.error("Error during OTP verification and password change:", error);
     res.status(500).json({ message: "Internal server error" });
   }
@@ -375,8 +382,22 @@ const deleteAccount = async (req, res) => {
       return res.status(401).json({ message: 'Incorrect Password' });
     }
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Error during account deletion:', error);
     return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+const testSentry = (req, res) => {
+  try {
+    // This will throw an intentional error
+    throw new Error("This is a test error for Sentry integration");
+  } catch (error) {
+    // Capture and report the error to Sentry
+    Sentry.captureException(error);
+
+    // Return an error response to the client
+    res.status(500).json({ message: "Something went wrong. Error reported to Sentry." });
   }
 };
 
@@ -390,4 +411,5 @@ module.exports = {
   forgotPassword,
   verifyOTPAndChangePassword,
   deleteAccount,
+  testSentry
 };

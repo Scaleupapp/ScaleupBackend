@@ -2,7 +2,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/userModel');
 const UserSettings = require('../models/userSettingsModel');
-
+const Sentry = require('@sentry/node');
 
 require('dotenv').config();
 const jwtSecret = process.env.JWT_SECRET;
@@ -40,6 +40,7 @@ const changePassword = async (req, res) => {
 
     res.json({ message: 'Password changed successfully' });
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Error changing password:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -66,6 +67,7 @@ const updateCommentPrivileges = async (req, res) => {
   
       res.json({ message: 'Comment privileges updated successfully' });
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error updating comment privileges:', error);
       res.status(500).json({ error: 'Internal server error' });
     }

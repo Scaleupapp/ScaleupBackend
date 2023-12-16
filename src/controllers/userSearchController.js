@@ -4,7 +4,7 @@ const Content = require('../models/contentModel');
 //const createNotification = require('../controllers/contentController').createNotification;
 const jwt = require('jsonwebtoken');
 const {createNotification }  = require('../controllers/contentController'); 
-
+const Sentry = require('@sentry/node');
 require('dotenv').config();
 const jwtSecret = process.env.JWT_SECRET;
 
@@ -78,6 +78,7 @@ exports.searchUsers = async (req, res) => {
 
     res.status(200).json(formattedResults);
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Error searching for users:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -182,6 +183,7 @@ exports.getUserDetails = async (req, res) => {
 
     res.status(200).json(formattedUser);
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Error fetching user details:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -240,6 +242,7 @@ exports.getUserDetails = async (req, res) => {
     
         res.status(200).json({ message: 'You are now following this user' });
       } catch (error) {
+        Sentry.captureException(error);
         console.error('Error following user:', error);
         res.status(500).json({ message: 'Internal server error' });
       }
@@ -288,6 +291,7 @@ exports.getUserDetails = async (req, res) => {
   
       res.status(200).json({ message: 'You have unfollowed this user' });
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error unfollowing user:', error);
       res.status(500).json({ message: 'Internal server error' });
     }
@@ -321,6 +325,7 @@ exports.getUserDetails = async (req, res) => {
   
       res.status(200).json({ followerList, followingList });
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error getting follow/unfollow list:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
