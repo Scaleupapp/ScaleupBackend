@@ -41,12 +41,12 @@ exports.addContent = async (req, res) => {
     }
 
     // Create folder structure on S3
-    const folderKey = `${userId}/${heading}/`;
+    const uniqueFolderName = `${userId}/${heading}_${Date.now()}/`;
 
     // Upload the file to S3
     const params = {
       Bucket: 'scaleupbucket',
-      Key: `${folderKey}${contentFile.originalname}`, // You can adjust the file naming here
+      Key: `${uniqueFolderName}${contentFile.originalname}`, // You can adjust the file naming here
       Body: contentFile.buffer,
       ContentType: contentFile.mimetype,
       ACL: 'public-read', // Set ACL to public-read
