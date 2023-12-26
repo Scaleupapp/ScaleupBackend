@@ -617,6 +617,10 @@ exports.markNotificationsAsRead = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 10; // Default page size
+    const skip = (page - 1) * pageSize;
+
     // Get the list of usernames that the logged-in user is following
     const followingUsernames = user.following || [];
 
@@ -627,16 +631,19 @@ exports.markNotificationsAsRead = async (req, res) => {
     const followingUserIds = followingUsers.map(user => user._id);
 
     // Query for content created by the users the logged-in user is following
-    const followedUsersContent = await Content.find({ userId: { $in: followingUserIds } })
-      .select('username postdate heading hashtags relatedTopics captions contentURL likes comments  contentType smeVerify')
+      const followedUsersContent = await Content.find({ userId: { $in: followingUserIds } })
+      .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify')
       .populate('userId', 'profilePicture username')
-      .sort({ postdate: -1 });
+      .sort({ postdate: -1 })
+      .skip(skip)
+      .limit(pageSize);
 
-     // Query for the logged-in user's own content
-     const loggedInUserContent = await Content.find({ userId })
-     .select('username postdate heading hashtags relatedTopics captions contentURL likes comments  contentType smeVerify')
-     .populate('userId', 'profilePicture username')
-     .sort({ postdate: -1 });
+    const loggedInUserContent = await Content.find({ userId })
+      .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify')
+      .populate('userId', 'profilePicture username')
+      .sort({ postdate: -1 })
+      .skip(skip)
+      .limit(pageSize);
 
      // Combine the content from followed users and the logged-in user
     const allContent = [...followedUsersContent, ...loggedInUserContent];
@@ -659,7 +666,19 @@ exports.markNotificationsAsRead = async (req, res) => {
       isVerified: content.smeVerify === 'Accepted',
     }));
 
-    res.json({ content: contentWithVerification });
+    // Calculate total number of pages
+    const totalFollowedUsersContent = await Content.countDocuments({ userId: { $in: followingUserIds } });
+    const totalLoggedInUserContent = await Content.countDocuments({ userId });
+    const totalContent = totalFollowedUsersContent + totalLoggedInUserContent;
+    const totalPages = Math.ceil(totalContent / pageSize);
+
+
+    res.json({ content: contentWithVerification,
+      pagination: {
+        page,
+        pageSize,
+        totalPages,
+        totalContent} });
   } catch (error) {
     Sentry.captureException(error);
     console.error('Error getting homepage content:', error);
