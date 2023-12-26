@@ -89,57 +89,45 @@ exports.searchUsers = async (req, res) => {
 // Controller function to get detailed information about a specific user
 exports.getUserDetails = async (req, res) => {
   try {
-    // Get the user's unique identifier from the request parameters
     const { userId } = req.params;
-
-    // Check if a valid JWT token is present in the request headers
     const token = req.headers.authorization.split(' ')[1];
-    const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
+    const decoded = jwt.verify(token, jwtSecret);
 
-    // Get the user's ID from the decoded token
     const loggedUserId = decoded.userId;
+    const user = await User.findById(userId).select('profilePicture username firstname lastname email phoneNumber bio.bioInterests education workExperience courses certifications badges dateOfBirth location bio.bioAbout followers following followersCount followingCount role blockedUsers');
 
-    // Fetch the user's details, including blockedUsers
-    const user = await User.findById(userId).select(
-      'profilePicture username firstname lastname email phoneNumber bio.bioInterests education workExperience courses certifications badges dateOfBirth location bio.bioAbout followers following followersCount followingCount role blockedUsers'
-    );
-
-    // Check if the user was not found
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     const targetUser = await User.findById(userId);
     const loggedInUser = await User.findById(loggedUserId);
-    // Check if either user has blocked the other
-    if (
-      loggedInUser.blockedUsers.includes(userId) ||
-      targetUser.blockedUsers.includes(loggedUserId)
-    ) {
-      // If either user has blocked the other, return a message indicating the block
+    if (loggedInUser.blockedUsers.includes(userId) || targetUser.blockedUsers.includes(loggedUserId)) {
       return res.status(403).json({ error: 'Access denied. This user is blocked.' });
     }
 
-    // Fetch the user's associated content, populating both 'likes' and 'comments'
-    const userContent = await Content.find({ userId }).select(
-      'heading captions contentURL hashtags relatedTopics postdate likes comments smeVerify'
-    )
+    // Pagination parameters
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 10;
+    const skip = (page - 1) * pageSize;
+
+    const userContentQuery = Content.find({ userId }).select('heading captions contentURL hashtags relatedTopics postdate likes comments smeVerify')
       .populate('likes', 'username')
       .populate({
         path: 'comments',
-        select: 'commentText username commentDate', // Adjust the fields you want to select
-      });
+        select: 'commentText username commentDate'
+      })
+      .skip(skip)
+      .limit(pageSize)
+      .sort({ postdate: -1 });
 
     const totalPosts = await Content.countDocuments({ userId: user._id });
+    const totalPages = Math.ceil(totalPosts / pageSize);
+    const userContent = await userContentQuery;
 
-    // Get the list of user IDs that the logged-in user is following
     const followingUserIds = loggedInUser.following || [];
-
-    // Check if the logged-in user is following the user whose details are being fetched
     const isFollowing = followingUserIds.includes(user.username);
 
-
-    // Format the user details
     const formattedUser = {
       profilePicture: user.profilePicture,
       userId: user._id,
@@ -177,8 +165,18 @@ exports.getUserDetails = async (req, res) => {
         },
         smeVerify: content.smeVerify === 'Accepted',
         contentId: content._id,
-        comments: content.comments, // Include comments here
+        comments: content.comments.map(comment => ({
+          commentText: comment.commentText,
+          username: comment.username,
+          commentDate: comment.commentDate
+        })),
       })),
+      pagination : {
+        currentPage: page,
+        pageSize,
+        totalPages,
+        totalItems: totalPosts
+      }
     };
 
     res.status(200).json(formattedUser);

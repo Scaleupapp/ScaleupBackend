@@ -251,7 +251,7 @@ exports.getContentDetails = async (req, res) => {
     try {
       // Verify the user's identity using the JWT token
       const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
+      const decoded = jwt.verify(token, jwtSecret);
   
       // Get the user's ID from the decoded token
       const userId = decoded.userId;
@@ -262,42 +262,57 @@ exports.getContentDetails = async (req, res) => {
         return res.status(404).json({ message: 'User not found' });
       }
   
+      // Pagination parameters
+      const page = parseInt(req.query.page) || 1;
+      const pageSize = parseInt(req.query.pageSize) || 10; // Default page size
+      const skip = (page - 1) * pageSize;
+  
       // Get the user's bio interests
       const userBioInterests = user.bio.bioInterests;
   
-      // Get the list of blocked user IDs from the logged-in user's document
+      // Get the list of blocked user IDs and users who have blocked the logged-in user
       const blockedUserIds = user.blockedUsers || [];
-
-      // Get the list of users who have blocked the logged-in user
-    const usersWhoBlockedLoggedInUser = await User.find({ blockedUsers: userId });
-
-    // Create an array of user IDs who have blocked the logged-in user
-    const usersWhoBlockedLoggedInUserIds = usersWhoBlockedLoggedInUser.map(user => user._id);
+      const usersWhoBlockedLoggedInUser = await User.find({ blockedUsers: userId });
+      const usersWhoBlockedLoggedInUserIds = usersWhoBlockedLoggedInUser.map(user => user._id);
   
-      // Query for content matching bio interests and exclude blocked users
-      const filteredContent = await Content.find({
+      // Calculate total number of matching content items
+      const totalContent = await Content.countDocuments({
         $and: [
-          { userId: { $nin: [...blockedUserIds, ...usersWhoBlockedLoggedInUserIds] } }, // Exclude blocked users' content
+          { userId: { $nin: [...blockedUserIds, ...usersWhoBlockedLoggedInUserIds] } },
           {
             $or: [
-              { hashtags: { $in: userBioInterests.map(tag => tag.replace('#', '')) } }, // Match hashtags
-              { relatedTopics: { $in: userBioInterests } }, // Match related topics
+              { hashtags: { $in: userBioInterests.map(tag => tag.replace('#', '')) } },
+              { relatedTopics: { $in: userBioInterests } },
+            ],
+          },
+        ],
+      });
+  
+      // Fetch the paginated content
+      const filteredContent = await Content.find({
+        $and: [
+          { userId: { $nin: [...blockedUserIds, ...usersWhoBlockedLoggedInUserIds] } },
+          {
+            $or: [
+              { hashtags: { $in: userBioInterests.map(tag => tag.replace('#', '')) } },
+              { relatedTopics: { $in: userBioInterests } },
             ],
           },
         ],
       })
-        .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify')
-        .populate('userId','profilePicture username')
-        .sort({ postdate: -1 }); // Sort by posting date in descending order
+      .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify')
+      .populate('userId', 'profilePicture username')
+      .sort({ postdate: -1 })
+      .skip(skip)
+      .limit(pageSize);
   
-      // Fetch comments for each content item and add them to the result
+      // Fetch comments for each content item
       const contentWithComments = [];
       for (const contentItem of filteredContent) {
         const comments = await Comment.find({ contentId: contentItem._id })
-          .populate('userId', 'profilePicture username'); // Populate user details for comments
+          .populate('userId', 'profilePicture username');
         contentWithComments.push({ ...contentItem.toObject(), comments });
       }
-  
   
       // Add a "Verified" tag to content with smeVerify = "Accepted"
       const contentWithVerification = contentWithComments.map(content => ({
@@ -305,14 +320,26 @@ exports.getContentDetails = async (req, res) => {
         isVerified: content.smeVerify === 'Accepted',
       }));
   
-      res.json({ content: contentWithVerification });
+      // Calculate total pages
+      const totalPages = Math.ceil(totalContent / pageSize);
+  
+      // Send the response with pagination details
+      res.json({
+        content: contentWithVerification,
+        pagination: {
+          page,
+          pageSize,
+          totalPages,
+          totalContent
+        }
+      });
+  
     } catch (error) {
       Sentry.captureException(error);
       console.error('Error getting filtered content:', error);
       res.status(500).json({ message: 'Internal server error' });
     }
   };
-  
   
 // Controller function to like a content item
 exports.likeContent = async (req, res) => {

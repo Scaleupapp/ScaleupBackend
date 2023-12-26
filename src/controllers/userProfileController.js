@@ -35,20 +35,18 @@ const getUserProfile = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Fetch the user's profile picture from S3 (if available)
-    if (user.profilePicture) {
-      const profilePictureUrl = user.profilePicture;
-      // You can use this URL to display the profile picture in your application
-    }
+    // Pagination parameters
+    const page = parseInt(req.query.page) || 1; // Default to first page if not provided
+    const pageSize = parseInt(req.query.pageSize) || 10; // Default page size
+    const skip = (page - 1) * pageSize;
 
-    // Fetch the user's resume from S3 (if available)
-    if (user.resume) {
-      const resumeUrl = user.resume;
-      // You can use this URL to provide a download link for the resume
-    }
+    // Execute query to find all content posted by the user with pagination
+    const userContent = await Content.find({ userId: userId })
+      .skip(skip)
+      .limit(pageSize)
+      .sort({ postdate: -1 });
 
-    // Find all content posted by the user
-    const userContent = await Content.find({ userId: userId });
+    const totalContent = await Content.countDocuments({ userId: userId });
 
     // Fetch comments for each content item and add them to the result
     const userContentWithComments = [];
@@ -57,8 +55,20 @@ const getUserProfile = async (req, res) => {
       userContentWithComments.push({ ...contentItem.toObject(), comments });
     }
 
-    // Return the user's profile information along with their posted content and comments
-    res.json({ user, userContent: userContentWithComments });
+    // Calculate total pages
+    const totalPages = Math.ceil(totalContent / pageSize);
+
+    // Return the user's profile information along with their posted content, comments, and pagination details
+    res.json({
+      user,
+      userContent: userContentWithComments,
+      pagination: {
+        currentPage: page,
+        pageSize,
+        totalPages,
+        totalItems: totalContent
+      }
+    });
   } catch (error) {
     Sentry.captureException(error);
     console.error('Error getting user profile:', error);
