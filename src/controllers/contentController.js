@@ -89,47 +89,55 @@ exports.addContent = async (req, res) => {
 };
 
 exports.listPendingVerificationContent = async (req, res) => {
-    try {
-        // Verify the user's identity using the JWT token
-        const token = req.headers.authorization.split(' ')[1];
-        const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
+  try {
+      // Verify the user's identity using the JWT token
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
 
-        // Get the user's ID from the decoded token
-        const userId = decoded.userId;
+      // Get the user's ID from the decoded token
+      const userId = decoded.userId;
 
-        // Find the user by ID
-        const user = await User.findById(userId);
+      // Find the user by ID
+      const user = await User.findById(userId);
 
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
+      if (!user) {
+          return res.status(404).json({ error: 'User not found' });
+      }
 
-        // Check if the user is an SME
-        if (user.role !== 'Subject Matter Expert') {
-            return res.status(403).json({ message: 'Access denied' });
-        }
+      // Check if the user is an SME
+      if (user.role !== 'Subject Matter Expert') {
+          return res.status(403).json({ message: 'Access denied' });
+      }
 
-        // Get the user's bio interests
-        const userBioInterests = user.bio.bioInterests;
+      // Get the user's bio interests
+      const userBioInterests = user.bio.bioInterests;
 
-        // Query for pending verification content
-        const pendingContent = await Content.find({
-            smeVerify: 'Pending', // Filter by pending verification status
-            $or: [
-                { hashtags: { $in: userBioInterests.map(tag => tag.replace('#', '')) } }, // Match hashtags
-                { relatedTopics: { $in: userBioInterests } }, // Match related topics
-            ],
-        })
-            .select('username postdate relatedTopics hashtags _id captions heading contentURL rating smeVerify smeComments contentType userId')
-            .populate('userId', 'username totalRating'); // Populate user data for content author
+      const page = parseInt(req.query.page) || 1;
+      const pageSize = parseInt(req.query.pageSize) || 10; // Default page size
+      const skip = (page - 1) * pageSize;
 
-        res.json({ pendingContent });
-    } catch (error) {
-      Sentry.captureException(error);
-        console.error('Error listing pending content:', error);
-        res.status(500).json({ message: 'Internal server error' });
-    }
+      // Query for pending verification content with pagination
+      const pendingContent = await Content.find({
+          smeVerify: 'Pending', // Filter by pending verification status
+          $or: [
+              { hashtags: { $in: userBioInterests.map(tag => tag.replace('#', '')) } }, // Match hashtags
+              { relatedTopics: { $in: userBioInterests } }, // Match related topics
+          ],
+      })
+          .select('username postdate relatedTopics hashtags _id captions heading contentURL rating smeVerify smeComments contentType userId')
+          .populate('userId', 'username totalRating') // Populate user data for content author
+          .sort({ postdate: -1 }) // Sort by postdate in descending order
+          .skip(skip)
+          .limit(pageSize);
+
+      res.json({ pendingContent });
+  } catch (error) {
+    Sentry.captureException(error);
+      console.error('Error listing pending content:', error);
+      res.status(500).json({ message: 'Internal server error' });
+  }
 };
+
 
 // New controller for updating content rating and verification
 exports.updateContentRatingAndVerification = async (req, res) => {
