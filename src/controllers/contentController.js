@@ -637,94 +637,79 @@ exports.markNotificationsAsRead = async (req, res) => {
 
 
 
- exports.getHomepageContent = async (req, res) => {
+exports.getHomepageContent = async (req, res) => {
   try {
-    // Verify the user's identity using the JWT token
-    const token = req.headers.authorization.split(' ')[1];
-    const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
+      // Verify the user's identity using the JWT token
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
 
-    // Get the user's ID from the decoded token
-    const userId = decoded.userId;
+      // Get the user's ID from the decoded token
+      const userId = decoded.userId;
 
-    // Find the user by ID in the database
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
+      // Find the user by ID in the database
+      const user = await User.findById(userId);
+      if (!user) {
+          return res.status(404).json({ message: 'User not found' });
+      }
 
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 10; // Default page size
-    const skip = (page - 1) * pageSize;
+      const page = parseInt(req.query.page) || 1;
+      const pageSize = parseInt(req.query.pageSize) || 10; // Default page size
+      const skip = (page - 1) * pageSize;
 
-    // Get the list of usernames that the logged-in user is following
-    const followingUsernames = user.following || [];
+      // Get the list of usernames that the logged-in user is following
+      const followingUsernames = user.following || [];
 
-    // Find the user IDs corresponding to the usernames in the following array
-    const followingUsers = await User.find({ username: { $in: followingUsernames } });
+      // Find the user IDs corresponding to the usernames in the following array
+      const followingUsers = await User.find({ username: { $in: followingUsernames } });
 
-    // Extract the user IDs from the followingUsers array
-    const followingUserIds = followingUsers.map(user => user._id);
+      // Extract the user IDs from the followingUsers array
+      const followingUserIds = followingUsers.map(user => user._id);
 
-    // Query for content created by the users the logged-in user is following
-      const followedUsersContent = await Content.find({ userId: { $in: followingUserIds } })
-      .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify')
-      .populate('userId', 'profilePicture username')
-      .sort({ postdate: -1 })
-      .skip(skip)
-      .limit(pageSize);
+      // Calculate total number of content items
+      const totalContent = await Content.countDocuments({ 
+          userId: { $in: [...followingUserIds, userId] }
+      });
 
-    const loggedInUserContent = await Content.find({ userId })
-      .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify')
-      .populate('userId', 'profilePicture username')
-      .sort({ postdate: -1 })
-      .skip(skip)
-      .limit(pageSize);
+      // Fetch the required slice of content already sorted
+      const content = await Content.find({ 
+              userId: { $in: [...followingUserIds, userId] } 
+          })
+          .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify')
+          .populate('userId', 'profilePicture username')
+          .sort({ postdate: -1 }) // Sorting globally
+          .skip(skip)
+          .limit(pageSize);
 
-     // Combine the content from followed users and the logged-in user
-     const allContent = [...followedUsersContent, ...loggedInUserContent]
+      // Fetch comments for each content item
+      const contentWithComments = [];
+      for (const contentItem of content) {
+          const comments = await Comment.find({ contentId: contentItem._id })
+              .populate('userId', 'profilePicture username');
+          contentWithComments.push({ ...contentItem.toObject(), comments });
+      }
 
-             // Sort all content by postdate in descending order
-             allContent.sort((a, b) => b.postdate - a.postdate);
+      // Process for verification tag
+      const contentWithVerification = contentWithComments.map(content => ({
+          ...content,
+          isVerified: content.smeVerify === 'Accepted',
+      }));
 
-     // Apply skip and limit for pagination
-     const paginatedContent = allContent.slice(skip, skip + pageSize);
+      const totalPages = Math.ceil(totalContent / pageSize);
 
-    // Sort all content by postdate in descending order
-    //const homepageContent = allContent.sort((a, b) => b.postdate - a.postdate);
-
-      // Fetch comments for each content item and add them to the result
-    const contentWithComments = [];
-   // for (const contentItem of homepageContent) {
-      for (const contentItem of paginatedContent) {
-      const comments = await Comment.find({ contentId: contentItem._id })
-        .populate('userId', 'profilePicture username'); // Populate user details for comments
-      contentWithComments.push({ ...contentItem.toObject(), comments });
-    }
-
-
-    // Add a "Verified" tag to content with smeVerify = "Accepted"
-    const contentWithVerification = contentWithComments.map(content => ({
-      ...content,
-      isVerified: content.smeVerify === 'Accepted',
-    }));
-
-    // Calculate total number of pages
-    const totalFollowedUsersContent = await Content.countDocuments({ userId: { $in: followingUserIds } });
-    const totalLoggedInUserContent = await Content.countDocuments({ userId });
-    const totalContent = totalFollowedUsersContent + totalLoggedInUserContent;
-    const totalPages = Math.ceil(totalContent / pageSize);
-
-
-    res.json({ content: contentWithVerification,
-      pagination: {
-        page,
-        pageSize,
-        totalPages,
-        totalContent} });
+      res.json({ 
+          content: contentWithVerification,
+          pagination: {
+              page,
+              pageSize,
+              totalPages,
+              totalContent
+          }
+      });
   } catch (error) {
-    Sentry.captureException(error);
-    console.error('Error getting homepage content:', error);
-    res.status(500).json({ message: 'Internal server error' });
+      Sentry.captureException(error);
+      console.error('Error getting homepage content:', error);
+      res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 
