@@ -681,14 +681,21 @@ exports.markNotificationsAsRead = async (req, res) => {
       .limit(pageSize);
 
      // Combine the content from followed users and the logged-in user
-    const allContent = [...followedUsersContent, ...loggedInUserContent];
+     const allContent = [...followedUsersContent, ...loggedInUserContent]
+
+             // Sort all content by postdate in descending order
+             allContent.sort((a, b) => b.postdate - a.postdate);
+
+     // Apply skip and limit for pagination
+     const paginatedContent = allContent.slice(skip, skip + pageSize);
 
     // Sort all content by postdate in descending order
-    const homepageContent = allContent.sort((a, b) => b.postdate - a.postdate);
+    //const homepageContent = allContent.sort((a, b) => b.postdate - a.postdate);
 
       // Fetch comments for each content item and add them to the result
     const contentWithComments = [];
-    for (const contentItem of homepageContent) {
+   // for (const contentItem of homepageContent) {
+      for (const contentItem of paginatedContent) {
       const comments = await Comment.find({ contentId: contentItem._id })
         .populate('userId', 'profilePicture username'); // Populate user details for comments
       contentWithComments.push({ ...contentItem.toObject(), comments });
