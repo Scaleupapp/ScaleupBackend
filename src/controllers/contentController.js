@@ -126,7 +126,7 @@ exports.listPendingVerificationContent = async (req, res) => {
           ],
       })
           .select('username postdate relatedTopics hashtags _id captions heading contentURL rating smeVerify smeComments contentType userId')
-          .populate('userId', 'username totalRating') // Populate user data for content author
+          .populate('userId', 'username totalRating profilePicture') // Populate user data for content author
           .sort({ postdate: -1 }) // Sort by postdate in descending order
           .skip(skip)
           .limit(pageSize);
