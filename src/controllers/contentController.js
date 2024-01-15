@@ -119,6 +119,7 @@ exports.listPendingVerificationContent = async (req, res) => {
       // Query for pending verification content with pagination
       const pendingContent = await Content.find({
           smeVerify: 'Pending', // Filter by pending verification status
+          userId: { $nin: await User.find({ role: 'Subject Matter Expert' }).select('_id') }, // Exclude content from users with the SME role
           $or: [
               { hashtags: { $in: userBioInterests.map(tag => tag.replace('#', '')) } }, // Match hashtags
               { relatedTopics: { $in: userBioInterests } }, // Match related topics
