@@ -111,7 +111,7 @@ exports.getUserDetails = async (req, res) => {
     const pageSize = parseInt(req.query.pageSize) || 10;
     const skip = (page - 1) * pageSize;
 
-    const userContentQuery = Content.find({ userId }).select('heading captions contentURL hashtags relatedTopics postdate likes comments smeVerify')
+    const userContentQuery = Content.find({ userId }).select('heading captions contentURL hashtags relatedTopics postdate likes comments contentType smeVerify')
       .populate('likes', 'username')
       .populate({
         path: 'comments',
@@ -165,6 +165,7 @@ exports.getUserDetails = async (req, res) => {
         },
         smeVerify: content.smeVerify === 'Accepted',
         contentId: content._id,
+        contentType: content.contentType,
         comments: content.comments.map(comment => ({
           commentText: comment.commentText,
           username: comment.username,
