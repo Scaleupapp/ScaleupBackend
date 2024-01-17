@@ -35,6 +35,17 @@ exports.searchUsers = async (req, res) => {
     // Get the list of user IDs that the logged-in user is following
     const followingUserIds = loggedInUser.following || [];
 
+    // Search in Content model for matching hashtags, related topics, and captions
+    const matchingContent = await Content.find({
+      $or: [
+        { hashtags: { $in: regexPatterns } },
+        { relatedTopics: { $in: regexPatterns } },
+        { captions: { $in: regexPatterns } },
+      ],
+    });
+    const contentUserIds = matchingContent.map(content => content.userId);
+
+
     // Search users based on multiple fields and exclude blocked users
     const searchResults = await User.find({
       $and: [
@@ -46,6 +57,7 @@ exports.searchUsers = async (req, res) => {
             { lastname: { $in: regexPatterns } }, // Case-insensitive last name search
             { location: { $in: regexPatterns } }, // Case-insensitive location search
             { 'bio.bioInterests': { $in: regexPatterns } }, // Case-insensitive interests search
+            { _id: { $in: contentUserIds } }, // Search by user IDs of matching content
           ],
         },
         { _id: { $nin: [...blockedUserIds, ...usersWhoBlockedLoggedInUserIds] } }, // Exclude blocked users
