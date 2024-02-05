@@ -88,6 +88,7 @@ exports.addContent = async (req, res) => {
   }
 };
 
+/*
 exports.listPendingVerificationContent = async (req, res) => {
   try {
       // Verify the user's identity using the JWT token
@@ -136,6 +137,83 @@ exports.listPendingVerificationContent = async (req, res) => {
     Sentry.captureException(error);
       console.error('Error listing pending content:', error);
       res.status(500).json({ message: 'Internal server error' });
+  }
+};
+*/
+
+exports.listPendingVerificationContent = async (req, res) => {
+  try {
+      // Verify the user's identity using the JWT token
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
+
+      // Get the user's ID from the decoded token
+      const userId = decoded.userId;
+
+      // Find the user by ID
+      const user = await User.findById(userId);
+
+      if (!user) {
+          return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Check if the user is an SME
+      if (user.role !== 'Subject Matter Expert') {
+          return res.status(403).json({ message: 'Access denied' });
+      }
+
+      // Get the user's bio interests
+      const userBioInterests = user.bio.bioInterests;
+
+      const page = parseInt(req.query.page) || 1;
+      const pageSize = parseInt(req.query.pageSize) || 10; // Default page size
+      const skip = (page - 1) * pageSize;
+
+      // Exclude content from users with the SME role
+      const smeUserIds = await User.find({ role: 'Subject Matter Expert' }).select('_id');
+
+      // Calculate total number of pending verification content
+      const totalPendingContent = await Content.countDocuments({
+          smeVerify: 'Pending', // Filter by pending verification status
+          userId: { $nin: smeUserIds }, // Exclude content from users with the SME role
+          $or: [
+              { hashtags: { $in: userBioInterests.map(tag => tag.replace('#', '')) } }, // Match hashtags
+              { relatedTopics: { $in: userBioInterests } }, // Match related topics
+          ],
+      });
+
+      // Query for pending verification content with pagination
+      const pendingContent = await Content.find({
+          smeVerify: 'Pending',
+          userId: { $nin: smeUserIds },
+          $or: [
+              { hashtags: { $in: userBioInterests.map(tag => tag.replace('#', '')) } },
+              { relatedTopics: { $in: userBioInterests } },
+          ],
+      })
+          .select('username postdate relatedTopics hashtags _id captions heading contentURL rating smeVerify smeComments contentType userId')
+          .populate('userId', 'username totalRating profilePicture')
+          .sort({ postdate: -1 })
+          .skip(skip)
+          .limit(pageSize);
+
+      // Calculate total pages
+      const totalPages = Math.ceil(totalPendingContent / pageSize);
+
+      // Send the response with pagination details
+      res.json({
+        pendingContent,
+        pagination: {
+          page,
+          pageSize,
+          totalPages,
+          totalPendingContent
+        }
+      });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error listing pending content:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 };
 
