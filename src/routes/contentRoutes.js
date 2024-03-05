@@ -61,5 +61,8 @@ router.get('/homepage', contentController.getHomepageContent);
 // Route for marking  notification as read
 router.post('/notifications/mark-as-read', contentController.markNotificationsAsRead);
 
+// New route for deleting content by ID
+router.delete('/delete/:contentId', contentController.deleteContent);
+
 
 module.exports = router;

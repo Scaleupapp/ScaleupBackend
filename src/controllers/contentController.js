@@ -792,3 +792,38 @@ exports.getHomepageContent = async (req, res) => {
 };
 
 
+exports.deleteContent = async (req, res) => {
+  try {
+    const { contentId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret);
+    const userId = decoded.userId;
+
+    const content = await Content.findById(contentId);
+    if (!content) {
+      return res.status(404).json({ error: 'Content not found' });
+    }
+
+    // Verify the user attempting to delete the content is the owner
+    if (content.userId.toString() !== userId) {
+      return res.status(403).json({ message: 'You do not have permission to delete this content' });
+    }
+
+      // Delete associated comments from MongoDB
+      await Comment.deleteMany({ contentId: content._id });
+
+      // Delete the content document from MongoDB
+      await Content.deleteOne({ _id: contentId });
+
+      res.json({ message: 'Content and associated comments deleted successfully' });
+    
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error deleting content and associated comments:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+
+
+
