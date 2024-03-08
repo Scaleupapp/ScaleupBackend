@@ -64,6 +64,12 @@ const contentSchema = new mongoose.Schema({
   contentType: {
     type: String,
   },
+
+  viewCount: {
+    type: Number,
+    default: 0, // Initialize view count with 0
+  },
+
   smeVerify: {
     type: String,
     enum: ['NA', 'Pending', 'Accepted', 'Rejected'], // Enum values for NA, Pending, Accepted, and Rejected

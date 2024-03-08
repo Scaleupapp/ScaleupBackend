@@ -824,6 +824,27 @@ exports.deleteContent = async (req, res) => {
   }
 };
 
+exports.incrementViewCount = async (req, res) => {
+  try {
+    const { contentId } = req.params;
+    const content = await Content.findById(contentId);
+
+    if (!content) {
+      return res.status(404).json({ message: 'Content not found' });
+    }
+
+    content.viewCount += 1; // Increment the view count
+    await content.save();
+
+    res.status(200).json({ message: 'View count updated successfully', viewCount: content.viewCount });
+  } catch (error) {
+    console.error('Error incrementing view count:', error);
+    Sentry.captureException(error); // Capture the exception with Sentry
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+
 
 
 
