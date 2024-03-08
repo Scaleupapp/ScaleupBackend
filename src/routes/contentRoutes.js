@@ -65,7 +65,7 @@ router.post('/notifications/mark-as-read', contentController.markNotificationsAs
 router.delete('/delete/:contentId', contentController.deleteContent);
 
 // New route for incrementing the view count of a video content
-router.post('/content/view/:contentId', contentController.incrementViewCount);
+router.post('/view/:contentId', contentController.incrementViewCount);
 
 
 module.exports = router;
