@@ -178,6 +178,7 @@ exports.getUserDetails = async (req, res) => {
         smeVerify: content.smeVerify === 'Accepted',
         contentId: content._id,
         contentType: content.contentType,
+        viewCount: content.viewCount,
         comments: content.comments.map(comment => ({
           commentText: comment.commentText,
           username: comment.username,
