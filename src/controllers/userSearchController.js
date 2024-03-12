@@ -123,7 +123,7 @@ exports.getUserDetails = async (req, res) => {
     const pageSize = parseInt(req.query.pageSize) || 10;
     const skip = (page - 1) * pageSize;
 
-    const userContentQuery = Content.find({ userId }).select('heading captions contentURL hashtags relatedTopics postdate likes comments contentType smeVerify')
+    const userContentQuery = Content.find({ userId }).select('heading captions contentURL hashtags relatedTopics postdate likes comments contentType smeVerify viewCount')
       .populate('likes', 'username')
       .populate({
         path: 'comments',
