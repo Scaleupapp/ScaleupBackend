@@ -324,6 +324,7 @@ exports.getContentDetails = async (req, res) => {
         smeVerify: content.smeVerify,
         smeComments: content.smeComments,
         contentType: content.contentType,
+        viewCount: content.viewCount,
       };
   
       res.json({ contentDetails });
@@ -387,7 +388,7 @@ exports.getContentDetails = async (req, res) => {
           },
         ],
       })
-      .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify')
+      .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify viewCount')
       .populate('userId', 'profilePicture username')
       .sort({ postdate: -1 })
       .skip(skip)
@@ -626,6 +627,7 @@ exports.getPostDetails = async (req, res) => {
       likeCount: content.likeCount,
       CommentCount: content.CommentCount,
       contentType: content.contentType,
+      viewCount: content.viewCount,
 
     };
 
@@ -753,7 +755,7 @@ exports.getHomepageContent = async (req, res) => {
       const content = await Content.find({ 
               userId: { $in: [...followingUserIds, userId] } 
           })
-          .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify')
+          .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify viewCount')
           .populate('userId', 'profilePicture username')
           .sort({ postdate: -1 }) // Sorting globally
           .skip(skip)
