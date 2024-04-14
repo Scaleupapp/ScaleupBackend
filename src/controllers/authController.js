@@ -199,7 +199,7 @@ const loginWithOTP = async (req, res) => {
 };
 
 const verifyOTP = async (req, res) => {
-  const { phoneNumber, userOTP,devicetoken } = req.body;
+  const { phoneNumber, userOTP, devicetoken } = req.body;
 
   try {
     // Find the user by phone number
@@ -214,6 +214,7 @@ const verifyOTP = async (req, res) => {
     const token = jwt.sign({ userId: user._id }, jwtSecret, {
       expiresIn: "240h",
     });
+
     const isFirstTimeLogin1 = user.isFirstTimeLogin;
     if (user.isFirstTimeLogin) {
       user.isFirstTimeLogin = false;
@@ -225,13 +226,22 @@ const verifyOTP = async (req, res) => {
     user.devicetoken=devicetoken;
     await user.save();
 
-    res.json({ message: "Login successful", token, isFirstTimeLogin1});
+    res.json({ message: "Login successful", token, isFirstTimeLogin1 });
   } catch (error) {
     Sentry.captureException(error);
     console.error("OTP verification error:", error);
+
+    // Check if the error is due to token expiration
+    if (error.name === 'TokenExpiredError') {
+      // JWT token has expired, prompt user to re-login
+      return res.status(401).json({ message: "Session expired. Please login again." });
+    }
+
+    // For other types of errors, return internal server error
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
 
 // Create a transporter for sending emails
 const transporter = nodemailer.createTransport({
