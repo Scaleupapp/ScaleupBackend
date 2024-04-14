@@ -48,8 +48,8 @@ const login = async (req, res) => {
       // Create a JWT token for session management (customize as needed)
       const token = jwt.sign({ userId: user._id }, jwtSecret, {
         expiresIn: '240h',
-      }
-      );
+      });
+
       user.devicetoken=devicetoken;
       await user.save();
 
@@ -74,9 +74,18 @@ const login = async (req, res) => {
   } catch (error) {
     Sentry.captureException(error);
     console.error("Error during login:", error);
+
+    // Check if the error is due to token expiration
+    if (error.name === 'TokenExpiredError') {
+      // JWT token has expired, prompt user to re-login
+      return res.status(401).json({ message: "Session expired. Please login again." });
+    }
+
+    // For other types of errors, return internal server error
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
 
 module.exports = {
   login, // Export the login function as an object property
