@@ -47,7 +47,7 @@ const login = async (req, res) => {
       // Password is correct
       // Create a JWT token for session management (customize as needed)
       const token = jwt.sign({ userId: user._id }, jwtSecret, {
-        expiresIn: '240h',
+        expiresIn: '7200h',
       });
 
       user.devicetoken=devicetoken;
@@ -212,7 +212,7 @@ const verifyOTP = async (req, res) => {
 
     // If OTP is correct, generate a JWT token and return it
     const token = jwt.sign({ userId: user._id }, jwtSecret, {
-      expiresIn: "240h",
+      expiresIn: "7200h",
     });
 
     const isFirstTimeLogin1 = user.isFirstTimeLogin;
