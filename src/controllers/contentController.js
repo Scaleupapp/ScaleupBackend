@@ -376,23 +376,33 @@ exports.getContentDetails = async (req, res) => {
         ],
       });
   
-      // Fetch the paginated content
-      const filteredContent = await Content.find({
-        $and: [
-          { userId: { $nin: [...blockedUserIds, ...usersWhoBlockedLoggedInUserIds] } },
-          {
-            $or: [
-              { hashtags: { $in: userBioInterests.map(tag => tag.replace('#', '')) } },
-              { relatedTopics: { $in: userBioInterests } },
-            ],
-          },
-        ],
-      })
-      .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify viewCount')
-      .populate('userId', 'profilePicture username')
-      .sort({ postdate: -1 })
-      .skip(skip)
-      .limit(pageSize);
+  // Fetch the paginated content
+  const filteredContent = await Content.find({
+    $and: [
+      { 
+        $or: [
+          { userId: userId },  // Always include the user's own posts
+          { 
+            $and: [
+              { userId: { $nin: [...blockedUserIds, ...usersWhoBlockedLoggedInUserIds] } },
+              {
+                $or: [
+                  { hashtags: { $in: userBioInterests.map(tag => new RegExp('^' + tag.trim().replace('#', '') + '\\s*$', 'i')) } }, // Handle hashtags insensitively and trim spaces
+                  { relatedTopics: { $in: userBioInterests.map(topic => new RegExp('^' + topic.trim() + '\\s*$', 'i')) } } // Handle related topics insensitively and trim spaces
+                ],
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  })
+  .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify viewCount')
+  .populate('userId', 'profilePicture username')
+  .sort({ postdate: -1 })
+  .skip(skip)
+  .limit(pageSize);
+
   
       // Fetch comments for each content item
       const contentWithComments = [];
