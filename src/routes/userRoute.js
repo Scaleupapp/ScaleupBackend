@@ -62,5 +62,11 @@ router.post('/updateCommentPrivileges', settingsController.updateCommentPrivileg
 // Route for fetching blocked users
 router.get('/blocked-users', userController.getBlockedUsers);
 
+// Submit feedback route
+router.post('/submitfeedback', upload.single('attachmentFile'),settingsController.submitFeedback);
+
+// Get feedback status route
+router.get('/feedback/status', settingsController.getFeedbackStatus);
+
 
 module.exports = router;
