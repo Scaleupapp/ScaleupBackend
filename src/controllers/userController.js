@@ -18,7 +18,6 @@ aws.config.update({
 });
 const s3 = new aws.S3();
 
-// Update the user's profile
 const updateProfile = async (req, res) => {
   try {
     // Verify the user's identity using the JWT token
@@ -38,49 +37,60 @@ const updateProfile = async (req, res) => {
     // Access the uploaded profile picture data
     const file = req.file;
 
-    if (!file) {
-      return res.status(400).json({ message: 'No file uploaded' });
-    }
-
-    // Define the AWS S3 parameters for uploading
-    const params = {
-      Bucket: 'scaleupbucket',
-      Key: `${userId}/profile-picture.jpg`,
-      Body: file.buffer,
-      ACL: 'public-read', // Make uploaded file publicly accessible
-      ContentType: file.mimetype,
-    };
-
-    // Upload the file to AWS S3
-    s3.upload(params, async (err, data) => {
-      if (err) {
-        console.error('S3 upload error:', err);
-        return res.status(500).json({ message: 'Failed to upload profile picture' });
-      }
-
-      // Update the user's profile information with the S3 file URL
-      user.profilePicture = data.Location;
+    const updateUserData = () => {
       user.location = req.body.location || user.location;
       user.dateOfBirth = req.body.dateOfBirth || user.dateOfBirth;
-      user.bio.bioAbout = req.body.bioAbout || user.bioAbout;
+      user.bio.bioAbout = req.body.bioAbout || user.bio.bioAbout;
       if (req.body.bioInterests) {
         user.bio.bioInterests = req.body.bioInterests.split(',').map((interest) => interest.trim());
+      } else if (!req.body.bioInterests && user.bio.bioInterests) {
+        user.bio.bioInterests = user.bio.bioInterests;
       } else {
         user.bio.bioInterests = [];
       }
 
       // Save the updated user data
-      await user.save();
+      return user.save();
+    };
 
-      // Return a success message
-      res.json({ message: 'Profile updated successfully' });
-    });
+    // If a file is uploaded, handle S3 upload
+    if (file) {
+      const params = {
+        Bucket: 'scaleupbucket',
+        Key: `${userId}/profile-picture.jpg`,
+        Body: file.buffer,
+        ACL: 'public-read', // Make uploaded file publicly accessible
+        ContentType: file.mimetype,
+      };
+
+      // Upload the file to AWS S3
+      s3.upload(params, async (err, data) => {
+        if (err) {
+          console.error('S3 upload error:', err);
+          return res.status(500).json({ message: 'Failed to upload profile picture' });
+        }
+
+        // Update the user's profile picture URL
+        user.profilePicture = data.Location;
+
+        // Save user data after S3 upload
+        await updateUserData();
+
+        // Return a success message
+        res.json({ message: 'Profile updated successfully' });
+      });
+    } else {
+      // No file uploaded, update other user data directly
+      await updateUserData();
+      res.json({ message: 'Profile updated successfully without new picture' });
+    }
   } catch (error) {
     Sentry.captureException(error);
     console.error('Error updating profile:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 
 
 // Delete education information
