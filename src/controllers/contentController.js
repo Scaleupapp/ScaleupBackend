@@ -839,22 +839,40 @@ exports.deleteContent = async (req, res) => {
 exports.incrementViewCount = async (req, res) => {
   try {
     const { contentId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret);
+    const userId = decoded.userId;
+
     const content = await Content.findById(contentId);
 
     if (!content) {
       return res.status(404).json({ message: 'Content not found' });
     }
 
-    content.viewCount += 1; // Increment the view count
+    // Increment the view count for the content
+    content.viewCount += 1;
+
+    // Check if the user has already viewed the content
+    const userView = content.views.find(view => view.userId.toString() === userId);
+
+    if (userView) {
+      // If the user has already viewed the content, increment the count
+      userView.count += 1;
+    } else {
+      // If the user has not viewed the content, add a new view entry
+      content.views.push({ userId, count: 1 });
+    }
+
     await content.save();
 
-    res.status(200).json({ message: 'View count updated successfully', viewCount: content.viewCount });
+    res.status(200).json({ message: 'View count updated successfully', viewCount: content.viewCount, views: content.views });
   } catch (error) {
     console.error('Error incrementing view count:', error);
-    Sentry.captureException(error); // Capture the exception with Sentry
+    Sentry.captureException(error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 
 
 
