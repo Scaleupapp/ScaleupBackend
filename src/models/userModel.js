@@ -1,4 +1,3 @@
-
 const mongoose = require('mongoose');
 
 // Define the User schema
@@ -84,65 +83,64 @@ const userSchema = new mongoose.Schema({
     {
         type: String, 
     },
-],
+  ],
 
-following: [
+  following: [
     {
         type: String, 
     },
-],
+  ],
 
-followersCount: {
-  type: Number,
-  default: 0, // Default count is 0
-},
-blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-resume: String,
+  followersCount: {
+    type: Number,
+    default: 0, // Default count is 0
+  },
+  blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  resume: String,
 
-followingCount: {
-  type: Number,
-  default: 0, // Default count is 0
-},
+  followingCount: {
+    type: Number,
+    default: 0, // Default count is 0
+  },
 
-loginOtp: {
-  type: String,
-},
+  loginOtp: {
+    type: String,
+  },
 
-forgotpasswordOTP: {
-  type: String,
-},
+  forgotpasswordOTP: {
+    type: String,
+  },
 
-// Reference to UserSettings
-userSettings: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: 'UserSettings',
-},
+  // Reference to UserSettings
+  userSettings: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'UserSettings',
+  },
 
-devicetype: {
-  type: String,
-},
+  devicetype: {
+    type: String,
+  },
 
+  devicetoken: {
+    type: String,
+  },
 
-devicetoken: {
-  type: String,
-},
+  isFirstTimeLogin: {
+    type: Boolean,
+    default: true,
+  },
 
-isFirstTimeLogin: {
-  type: Boolean,
-  default: true,
-},
+  isTestUser: {
+    type: Boolean,
+    default: false,
+  },
 
-},
-
-
-{
+}, {
   collection: 'Users' // Specify the collection name here
-}
-);
+});
 
 // Create the User model
 const User = mongoose.model('User', userSchema);
 
 // Export the User model
 module.exports = User;
-

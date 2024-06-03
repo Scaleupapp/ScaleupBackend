@@ -26,6 +26,10 @@ exports.searchUsers = async (req, res) => {
 
     // Get the list of blocked users by the logged-in user
     const loggedInUser = await User.findById(userId);
+    if (!loggedInUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
     const blockedUserIds = loggedInUser.blockedUsers || [];
 
     // Get the list of users who have blocked the logged-in user
@@ -45,9 +49,8 @@ exports.searchUsers = async (req, res) => {
     });
     const contentUserIds = matchingContent.map(content => content.userId);
 
-
-    // Search users based on multiple fields and exclude blocked users
-    const searchResults = await User.find({
+    // Build the base query for searching users
+    const baseQuery = {
       $and: [
         { _id: { $ne: userId } }, // Exclude the logged-in user
         {
@@ -62,7 +65,15 @@ exports.searchUsers = async (req, res) => {
         },
         { _id: { $nin: [...blockedUserIds, ...usersWhoBlockedLoggedInUserIds] } }, // Exclude blocked users
       ],
-    })
+    };
+
+    // Modify the query based on the test user status
+    if (!loggedInUser.isTestUser) {
+      baseQuery.$and.push({ isTestUser: false }); // Exclude test users for non-test users
+    }
+
+    // Search users based on the modified query
+    const searchResults = await User.find(baseQuery)
       .select(
         'profilePicture username firstname lastname role followers following followersCount followingCount'
       );

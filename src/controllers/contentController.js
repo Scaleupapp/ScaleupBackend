@@ -6,6 +6,7 @@ const Notification = require('../models/notificationModel'); // Import the Notif
 const UserSettings = require('../models/userSettingsModel'); // Import the UserSettings model
 const jwt = require('jsonwebtoken'); // Import JWT library
 const Sentry = require('@sentry/node');
+const mongoose = require('mongoose');
 require('dotenv').config();
 
 
@@ -172,25 +173,29 @@ exports.listPendingVerificationContent = async (req, res) => {
       // Exclude content from users with the SME role
       const smeUserIds = await User.find({ role: 'Subject Matter Expert' }).select('_id');
 
-      // Calculate total number of pending verification content
-      const totalPendingContent = await Content.countDocuments({
+      // Build the base query
+      let baseQuery = {
           smeVerify: 'Pending', // Filter by pending verification status
           userId: { $nin: smeUserIds }, // Exclude content from users with the SME role
           $or: [
               { hashtags: { $in: userBioInterests.map(tag => tag.replace('#', '')) } }, // Match hashtags
               { relatedTopics: { $in: userBioInterests } }, // Match related topics
           ],
-      });
+      };
+
+      // Modify the query based on the test user status
+      if (!user.isTestUser) {
+          baseQuery = {
+              ...baseQuery,
+              isTestUser: false, // Exclude test user content for non-test users
+          };
+      }
+
+      // Calculate total number of pending verification content
+      const totalPendingContent = await Content.countDocuments(baseQuery);
 
       // Query for pending verification content with pagination
-      const pendingContent = await Content.find({
-          smeVerify: 'Pending',
-          userId: { $nin: smeUserIds },
-          $or: [
-              { hashtags: { $in: userBioInterests.map(tag => tag.replace('#', '')) } },
-              { relatedTopics: { $in: userBioInterests } },
-          ],
-      })
+      const pendingContent = await Content.find(baseQuery)
           .select('username postdate relatedTopics hashtags _id captions heading contentURL rating smeVerify smeComments contentType userId')
           .populate('userId', 'username totalRating profilePicture')
           .sort({ postdate: -1 })
@@ -293,49 +298,61 @@ exports.updateContentRatingAndVerification = async (req, res) => {
 
 // Controller function to get content details by content ID for verfification
 exports.getContentDetails = async (req, res) => {
-    try {
-      const { contentId } = req.params;
-  
-      // Verify the user's identity using the JWT token
-      const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
-  
-      // Get the user's ID from the decoded token
-      const userId = decoded.userId;
-  
-      // Find the content by ID
-      const content = await Content.findById(contentId).populate('userId', 'username');
-  
-      if (!content) {
-        return res.status(404).json({ error: 'Content not found' });
-      }
-  
-      // You can include any additional details you want to display here
-      const contentDetails = {
-        _id: content._id,
-        username: content.username,
-        postdate: content.postdate,
-        relatedTopics: content.relatedTopics,
-        hashtags: content.hashtags,
-        captions: content.captions,
-        heading: content.heading,
-        contentURL: content.contentURL,
-        rating: content.rating,
-        smeVerify: content.smeVerify,
-        smeComments: content.smeComments,
-        contentType: content.contentType,
-        viewCount: content.viewCount,
-      };
-  
-      res.json({ contentDetails });
-    } catch (error) {
-      Sentry.captureException(error);
-      console.error('Error getting content details:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  };
+  try {
+    const { contentId } = req.params;
 
-  exports.getAllContent = async (req, res) => {
+    // Verify the user's identity using the JWT token
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
+
+    // Get the user's ID from the decoded token
+    const userId = decoded.userId;
+
+    // Find the user by ID
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Find the content by ID
+    const content = await Content.findById(contentId).populate('userId', 'username isTestUser');
+
+    if (!content) {
+      return res.status(404).json({ error: 'Content not found' });
+    }
+
+    // Check if the content should be accessible based on the test user status
+    if (!user.isTestUser && content.userId.isTestUser) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // You can include any additional details you want to display here
+    const contentDetails = {
+      _id: content._id,
+      username: content.userId.username,
+      postdate: content.postdate,
+      relatedTopics: content.relatedTopics,
+      hashtags: content.hashtags,
+      captions: content.captions,
+      heading: content.heading,
+      contentURL: content.contentURL,
+      rating: content.rating,
+      smeVerify: content.smeVerify,
+      smeComments: content.smeComments,
+      contentType: content.contentType,
+      viewCount: content.viewCount,
+    };
+
+    res.json({ contentDetails });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error getting content details:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.getAllContent = async (req, res) => {
     try {
       // Verify the user's identity using the JWT token
       const token = req.headers.authorization.split(' ')[1];
@@ -617,17 +634,28 @@ exports.getPostDetails = async (req, res) => {
     // Get the user's ID from the decoded token
     const userId = decoded.userId;
 
-    // Find the content by ID
-    const content = await Content.findById(contentId).populate('userId', 'username');
+    // Find the user by ID in the database
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Find the content by ID and populate the user data
+    const content = await Content.findById(contentId).populate('userId', 'username isTestUser');
 
     if (!content) {
       return res.status(404).json({ error: 'Content not found' });
     }
 
+    // Check if the logged-in user is not a test user and the content is from a test user
+    if (!user.isTestUser && content.userId.isTestUser) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
     // You can include any additional details you want to display here
     const contentDetails = {
       _id: content._id,
-      username: content.username,
+      username: content.userId.username,
       postdate: content.postdate,
       relatedTopics: content.relatedTopics,
       hashtags: content.hashtags,
@@ -638,7 +666,6 @@ exports.getPostDetails = async (req, res) => {
       CommentCount: content.CommentCount,
       contentType: content.contentType,
       viewCount: content.viewCount,
-
     };
 
     res.json({ contentDetails });
@@ -730,76 +757,84 @@ exports.markNotificationsAsRead = async (req, res) => {
 
 exports.getHomepageContent = async (req, res) => {
   try {
-      // Verify the user's identity using the JWT token
-      const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
+    // Verify the user's identity using the JWT token
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
 
-      // Get the user's ID from the decoded token
-      const userId = decoded.userId;
+    // Get the user's ID from the decoded token
+    const userId = decoded.userId;
 
-      // Find the user by ID in the database
-      const user = await User.findById(userId);
-      if (!user) {
-          return res.status(404).json({ message: 'User not found' });
+    // Find the user by ID in the database
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 10; // Default page size
+    const skip = (page - 1) * pageSize;
+
+    // Get the list of usernames that the logged-in user is following
+    const followingUsernames = user.following || [];
+
+    // Find the user IDs corresponding to the usernames in the following array
+    const followingUsers = await User.find({ username: { $in: followingUsernames } });
+
+    // Extract the user IDs from the followingUsers array
+    const followingUserIds = followingUsers.map(user => user._id);
+
+    // Base query for homepage content
+    const baseQuery = {
+      userId: { $in: [...followingUserIds, userId] }
+    };
+
+    // Modify the query based on the test user status
+    if (!user.isTestUser) {
+      const nonTestUsers = await User.find({ isTestUser: false }).select('_id');
+      const nonTestUserIds = nonTestUsers.map(user => user._id);
+      baseQuery.userId = { $in: [...nonTestUserIds, userId] }; // Exclude test user content for non-test users
+    }
+
+    // Calculate total number of content items
+    const totalContent = await Content.countDocuments(baseQuery);
+
+    // Fetch the required slice of content already sorted
+    const content = await Content.find(baseQuery)
+      .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify viewCount')
+      .populate('userId', 'profilePicture username isTestUser')
+      .sort({ postdate: -1 }) // Sorting globally
+      .skip(skip)
+      .limit(pageSize);
+
+    // Fetch comments for each content item
+    const contentWithComments = [];
+    for (const contentItem of content) {
+      const comments = await Comment.find({ contentId: contentItem._id })
+        .populate('userId', 'profilePicture username');
+      contentWithComments.push({ ...contentItem.toObject(), comments });
+    }
+
+    // Process for verification tag
+    const contentWithVerification = contentWithComments.map(content => ({
+      ...content,
+      isVerified: content.smeVerify === 'Accepted',
+    }));
+
+    const totalPages = Math.ceil(totalContent / pageSize);
+
+    res.json({
+      content: contentWithVerification,
+      pagination: {
+        page,
+        pageSize,
+        totalPages,
+        totalContent
       }
-
-      const page = parseInt(req.query.page) || 1;
-      const pageSize = parseInt(req.query.pageSize) || 10; // Default page size
-      const skip = (page - 1) * pageSize;
-
-      // Get the list of usernames that the logged-in user is following
-      const followingUsernames = user.following || [];
-
-      // Find the user IDs corresponding to the usernames in the following array
-      const followingUsers = await User.find({ username: { $in: followingUsernames } });
-
-      // Extract the user IDs from the followingUsers array
-      const followingUserIds = followingUsers.map(user => user._id);
-
-      // Calculate total number of content items
-      const totalContent = await Content.countDocuments({ 
-          userId: { $in: [...followingUserIds, userId] }
-      });
-
-      // Fetch the required slice of content already sorted
-      const content = await Content.find({ 
-              userId: { $in: [...followingUserIds, userId] } 
-          })
-          .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify viewCount')
-          .populate('userId', 'profilePicture username')
-          .sort({ postdate: -1 }) // Sorting globally
-          .skip(skip)
-          .limit(pageSize);
-
-      // Fetch comments for each content item
-      const contentWithComments = [];
-      for (const contentItem of content) {
-          const comments = await Comment.find({ contentId: contentItem._id })
-              .populate('userId', 'profilePicture username');
-          contentWithComments.push({ ...contentItem.toObject(), comments });
-      }
-
-      // Process for verification tag
-      const contentWithVerification = contentWithComments.map(content => ({
-          ...content,
-          isVerified: content.smeVerify === 'Accepted',
-      }));
-
-      const totalPages = Math.ceil(totalContent / pageSize);
-
-      res.json({ 
-          content: contentWithVerification,
-          pagination: {
-              page,
-              pageSize,
-              totalPages,
-              totalContent
-          }
-      });
+    });
   } catch (error) {
-      Sentry.captureException(error);
-      console.error('Error getting homepage content:', error);
-      res.status(500).json({ message: 'Internal server error' });
+    Sentry.captureException(error);
+    console.error('Error getting homepage content:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 };
 

@@ -54,6 +54,7 @@ const login = async (req, res) => {
       await user.save();
 
       const isFirstTimeLogin1 = user.isFirstTimeLogin;
+      const isTestUser =user.isTestUser;
       if(user.isFirstTimeLogin)
       {
         user.isFirstTimeLogin=false;
@@ -66,6 +67,8 @@ const login = async (req, res) => {
         token,
         isFirstTimeLogin1,
         id: user._id,
+        isTestUser,
+
       });
     } else {
       // Password is incorrect
