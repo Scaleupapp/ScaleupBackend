@@ -353,108 +353,109 @@ exports.getContentDetails = async (req, res) => {
 };
 
 exports.getAllContent = async (req, res) => {
-    try {
-      // Verify the user's identity using the JWT token
-      const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, jwtSecret);
-  
-      // Get the user's ID from the decoded token
-      const userId = decoded.userId;
-  
-      // Find the user by ID in the database
-      const user = await User.findById(userId);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-  
-      // Pagination parameters
-      const page = parseInt(req.query.page) || 1;
-      const pageSize = parseInt(req.query.pageSize) || 10; // Default page size
-      const skip = (page - 1) * pageSize;
-  
-      // Get the user's bio interests
-      const userBioInterests = user.bio.bioInterests;
-  
-      // Get the list of blocked user IDs and users who have blocked the logged-in user
-      const blockedUserIds = user.blockedUsers || [];
-      const usersWhoBlockedLoggedInUser = await User.find({ blockedUsers: userId });
-      const usersWhoBlockedLoggedInUserIds = usersWhoBlockedLoggedInUser.map(user => user._id);
-  
-      // Calculate total number of matching content items
-      const totalContent = await Content.countDocuments({
-        $and: [
-          { userId: { $nin: [...blockedUserIds, ...usersWhoBlockedLoggedInUserIds] } },
-          {
-            $or: [
-              { hashtags: { $in: userBioInterests.map(tag => tag.replace('#', '')) } },
-              { relatedTopics: { $in: userBioInterests } },
-            ],
-          },
-        ],
-      });
-  
-  // Fetch the paginated content
-  const filteredContent = await Content.find({
-    $and: [
-      { 
-        $or: [
-          { userId: userId },  // Always include the user's own posts
-          { 
-            $and: [
-              { userId: { $nin: [...blockedUserIds, ...usersWhoBlockedLoggedInUserIds] } },
-              {
-                $or: [
-                  { hashtags: { $in: userBioInterests.map(tag => new RegExp('^' + tag.trim().replace('#', '') + '\\s*$', 'i')) } }, // Handle hashtags insensitively and trim spaces
-                  { relatedTopics: { $in: userBioInterests.map(topic => new RegExp('^' + topic.trim() + '\\s*$', 'i')) } } // Handle related topics insensitively and trim spaces
-                ],
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  })
-  .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify viewCount')
-  .populate('userId', 'profilePicture username')
-  .sort({ postdate: -1 })
-  .skip(skip)
-  .limit(pageSize);
+  try {
+    // Verify the user's identity using the JWT token
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret);
 
-  
-      // Fetch comments for each content item
-      const contentWithComments = [];
-      for (const contentItem of filteredContent) {
-        const comments = await Comment.find({ contentId: contentItem._id })
-          .populate('userId', 'profilePicture username');
-        contentWithComments.push({ ...contentItem.toObject(), comments });
-      }
-  
-      // Add a "Verified" tag to content with smeVerify = "Accepted"
-      const contentWithVerification = contentWithComments.map(content => ({
-        ...content,
-        isVerified: content.smeVerify === 'Accepted',
-      }));
-  
-      // Calculate total pages
-      const totalPages = Math.ceil(totalContent / pageSize);
-  
-      // Send the response with pagination details
-      res.json({
-        content: contentWithVerification,
-        pagination: {
-          page,
-          pageSize,
-          totalPages,
-          totalContent
-        }
-      });
-  
-    } catch (error) {
-      Sentry.captureException(error);
-      console.error('Error getting filtered content:', error);
-      res.status(500).json({ message: 'Internal server error' });
+    // Get the user's ID from the decoded token
+    const userId = decoded.userId;
+
+    // Find the user by ID in the database
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
     }
-  };
+
+    // Pagination parameters
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 10; // Default page size
+    const skip = (page - 1) * pageSize;
+
+    // Get the user's bio interests and following list
+    const userBioInterests = user.bio.bioInterests;
+    const followingUsernames = user.following;
+
+    // Get the list of blocked user IDs and users who have blocked the logged-in user
+    const blockedUserIds = user.blockedUsers || [];
+    const usersWhoBlockedLoggedInUser = await User.find({ blockedUsers: userId });
+    const usersWhoBlockedLoggedInUserIds = usersWhoBlockedLoggedInUser.map(user => user._id);
+
+    // Find user IDs of people the current user is following
+    const followingUsers = await User.find({ username: { $in: followingUsernames } }, '_id');
+    const followingUserIds = followingUsers.map(user => user._id);
+
+    // Create the base query
+    let baseQuery = {
+      userId: { $nin: [...blockedUserIds, ...usersWhoBlockedLoggedInUserIds] },
+      $or: [
+        { hashtags: { $in: userBioInterests.map(tag => tag.replace('#', '')) } },
+        { relatedTopics: { $in: userBioInterests } },
+        { userId: { $in: followingUserIds } } // Include content from followed users
+      ],
+    };
+
+    // Modify the query based on whether the user is a test user or not
+    if (!user.isTestUser) {
+      const nonTestUserIds = await User.find({ isTestUser: false }, '_id').lean();
+      const nonTestUserIdArray = nonTestUserIds.map(user => user._id);
+      baseQuery = {
+        ...baseQuery,
+        $and: [
+          baseQuery,
+          { userId: { $in: nonTestUserIdArray } },
+        ],
+      };
+    }
+
+    // Calculate total number of matching content items
+    const totalContent = await Content.countDocuments(baseQuery);
+
+    // Fetch the paginated content
+    const filteredContent = await Content.find(baseQuery)
+      .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify viewCount')
+      .populate('userId', 'profilePicture username')
+      .sort({ postdate: -1 })
+      .skip(skip)
+      .limit(pageSize);
+
+    // Fetch comments for each content item
+    const contentWithComments = [];
+    for (const contentItem of filteredContent) {
+      const comments = await Comment.find({ contentId: contentItem._id })
+        .populate('userId', 'profilePicture username');
+      contentWithComments.push({ ...contentItem.toObject(), comments });
+    }
+
+    // Add a "Verified" tag to content with smeVerify = "Accepted"
+    const contentWithVerification = contentWithComments.map(content => ({
+      ...content,
+      isVerified: content.smeVerify === 'Accepted',
+    }));
+
+    // Calculate total pages
+    const totalPages = Math.ceil(totalContent / pageSize);
+
+    // Send the response with pagination details
+    res.json({
+      content: contentWithVerification,
+      pagination: {
+        page,
+        pageSize,
+        totalPages,
+        totalContent
+      }
+    });
+
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error getting filtered content:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+
+
   
 // Controller function to like a content item
 exports.likeContent = async (req, res) => {
