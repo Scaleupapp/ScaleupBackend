@@ -96,8 +96,7 @@ module.exports = {
 
 const register = async (req, res) => {
   // Extract user registration data from the request body
-  const { username, email, password, firstname, lastname, phoneNumber } =
-    req.body;
+  const { username, email, password, firstname, lastname, phoneNumber } = req.body;
 
   try {
     // Normalize email and username to lowercase
@@ -105,14 +104,16 @@ const register = async (req, res) => {
     const normalizedUsername = username.toLowerCase();
 
     // Check if the user already exists with the normalized email or username
-    const existingUser = await User.findOne({ $or: [{ email: normalizedEmail }, { username: normalizedUsername }, { phoneNumber }] });
+    const existingUser = await User.findOne({
+      $or: [{ email: normalizedEmail }, { username: normalizedUsername }, { phoneNumber }]
+    });
 
     if (existingUser) {
       return res.status(400).json({ message: "User already exists" });
     }
 
     // Hash the user's password before saving it in the database
-    const hashedPassword = await bcrypt.hash(password, 10); // You can adjust the number of salt rounds
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create a new user instance with normalized email and username
     const newUser = new User({
@@ -128,19 +129,30 @@ const register = async (req, res) => {
     await newUser.save();
 
     // Create user settings for the new user
-    const newuserSettings = new UserSettings({
-      userId: newUser._id,
-    });
+    const newuserSettings = new UserSettings({ userId: newUser._id });
     await newuserSettings.save();
 
+    // Automatically follow the admin user using admin's userID
+    const adminUser = await User.findById('6666829e3c71111d41f0d19a'); // Use the provided userID
+    if (adminUser) {
+      newUser.following.push(adminUser.username);
+      newUser.followingCount += 1;
+      await newUser.save();
+
+      adminUser.followers.push(newUser.username);
+      adminUser.followersCount += 1;
+      await adminUser.save();
+    }
+
     // Return a success message
-    res.json({ message: "Registration successful" });
+    res.json({ message: "Registration successful and following Admin" });
   } catch (error) {
     Sentry.captureException(error);
     console.error("Error during registration:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
 
 // Signout route
 const signout = (req, res) => {
