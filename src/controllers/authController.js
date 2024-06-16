@@ -145,7 +145,7 @@ const register = async (req, res) => {
     }
 
     // Return a success message
-    res.json({ message: "Registration successful and following Admin" });
+    res.json({ message: "Registration successful" });
   } catch (error) {
     Sentry.captureException(error);
     console.error("Error during registration:", error);
