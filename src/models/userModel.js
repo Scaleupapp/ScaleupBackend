@@ -135,6 +135,11 @@ const userSchema = new mongoose.Schema({
     default: false,
   },
 
+  isAdminUser: {
+    type: Boolean,
+    default: false,
+  },
+
 }, {
   collection: 'Users' // Specify the collection name here
 });
