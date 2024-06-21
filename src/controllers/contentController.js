@@ -144,83 +144,87 @@ exports.listPendingVerificationContent = async (req, res) => {
 
 exports.listPendingVerificationContent = async (req, res) => {
   try {
-      // Verify the user's identity using the JWT token
-      const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
+    // Verify the user's identity using the JWT token
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
 
-      // Get the user's ID from the decoded token
-      const userId = decoded.userId;
+    // Get the user's ID from the decoded token
+    const userId = decoded.userId;
 
-      // Find the user by ID
-      const user = await User.findById(userId);
+    // Find the user by ID
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
-      if (!user) {
-          return res.status(404).json({ error: 'User not found' });
-      }
+    // Check if the user is an SME
+    if (user.role !== 'Subject Matter Expert') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
 
-      // Check if the user is an SME
-      if (user.role !== 'Subject Matter Expert') {
-          return res.status(403).json({ message: 'Access denied' });
-      }
+    // Get the user's bio interests
+    const userBioInterests = user.bio.bioInterests.map(interest => interest.toLowerCase());
 
-      // Get the user's bio interests
-      const userBioInterests = user.bio.bioInterests;
+    // Pagination parameters
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 10; // Default page size
+    const skip = (page - 1) * pageSize;
 
-      const page = parseInt(req.query.page) || 1;
-      const pageSize = parseInt(req.query.pageSize) || 10; // Default page size
-      const skip = (page - 1) * pageSize;
+    // Exclude content from users with the SME role
+    const smeUsers = await User.find({ role: 'Subject Matter Expert' }, '_id').lean();
+    const smeUserIds = smeUsers.map(user => user._id);
 
-      // Exclude content from users with the SME role
-      const smeUserIds = await User.find({ role: 'Subject Matter Expert' }).select('_id');
+    // Build the base query
+    let baseQuery = {
+      smeVerify: 'Pending', // Filter by pending verification status
+      userId: { $nin: smeUserIds }, // Exclude content from users with the SME role
+      $or: [
+        { hashtags: { $in: userBioInterests.map(tag => new RegExp(tag, 'i')) } }, // Match hashtags (case-insensitive)
+        { relatedTopics: { $in: userBioInterests.map(topic => new RegExp(topic, 'i')) } } // Match related topics (case-insensitive)
+      ],
+    };
 
-      // Build the base query
-      let baseQuery = {
-          smeVerify: 'Pending', // Filter by pending verification status
-          userId: { $nin: smeUserIds }, // Exclude content from users with the SME role
-          $or: [
-              { hashtags: { $in: userBioInterests.map(tag => tag.replace('#', '')) } }, // Match hashtags
-              { relatedTopics: { $in: userBioInterests } }, // Match related topics
-          ],
+    // Modify the query based on the test user status
+    if (!user.isTestUser) {
+      const nonTestUsers = await User.find({ isTestUser: false }, '_id').lean();
+      const nonTestUserIds = nonTestUsers.map(user => user._id);
+      baseQuery = {
+        ...baseQuery,
+        userId: { $nin: smeUserIds, $in: nonTestUserIds }, // Exclude test user content for non-test users
       };
+    }
 
-      // Modify the query based on the test user status
-      if (!user.isTestUser) {
-          baseQuery = {
-              ...baseQuery,
-              isTestUser: false, // Exclude test user content for non-test users
-          };
+    // Calculate total number of pending verification content
+    const totalPendingContent = await Content.countDocuments(baseQuery);
+
+    // Query for pending verification content with pagination
+    const pendingContent = await Content.find(baseQuery)
+      .select('username postdate relatedTopics hashtags _id captions heading contentURL rating smeVerify smeComments contentType userId')
+      .populate('userId', 'username totalRating profilePicture')
+      .sort({ postdate: -1 })
+      .skip(skip)
+      .limit(pageSize);
+
+    // Calculate total pages
+    const totalPages = Math.ceil(totalPendingContent / pageSize);
+
+    // Send the response with pagination details
+    res.json({
+      pendingContent,
+      pagination: {
+        page,
+        pageSize,
+        totalPages,
+        totalPendingContent
       }
-
-      // Calculate total number of pending verification content
-      const totalPendingContent = await Content.countDocuments(baseQuery);
-
-      // Query for pending verification content with pagination
-      const pendingContent = await Content.find(baseQuery)
-          .select('username postdate relatedTopics hashtags _id captions heading contentURL rating smeVerify smeComments contentType userId')
-          .populate('userId', 'username totalRating profilePicture')
-          .sort({ postdate: -1 })
-          .skip(skip)
-          .limit(pageSize);
-
-      // Calculate total pages
-      const totalPages = Math.ceil(totalPendingContent / pageSize);
-
-      // Send the response with pagination details
-      res.json({
-        pendingContent,
-        pagination: {
-          page,
-          pageSize,
-          totalPages,
-          totalPendingContent
-        }
-      });
+    });
   } catch (error) {
     Sentry.captureException(error);
     console.error('Error listing pending content:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 
 
 // New controller for updating content rating and verification
@@ -373,7 +377,7 @@ exports.getAllContent = async (req, res) => {
     const skip = (page - 1) * pageSize;
 
     // Get the user's bio interests and following list
-    const userBioInterests = user.bio.bioInterests;
+    const userBioInterests = user.bio.bioInterests.map(interest => interest.toLowerCase());
     const followingUsernames = user.following;
 
     // Get the list of blocked user IDs and users who have blocked the logged-in user
@@ -382,29 +386,29 @@ exports.getAllContent = async (req, res) => {
     const usersWhoBlockedLoggedInUserIds = usersWhoBlockedLoggedInUser.map(user => user._id);
 
     // Find user IDs of people the current user is following
-    const followingUsers = await User.find({ username: { $in: followingUsernames } }, '_id');
+    const followingUsers = await User.find({ username: { $in: followingUsernames } });
     const followingUserIds = followingUsers.map(user => user._id);
 
     // Create the base query
     let baseQuery = {
       userId: { $nin: [...blockedUserIds, ...usersWhoBlockedLoggedInUserIds] },
       $or: [
-        { hashtags: { $in: userBioInterests.map(tag => tag.replace('#', '')) } },
-        { relatedTopics: { $in: userBioInterests } },
-        { userId: { $in: followingUserIds } } // Include content from followed users
-      ],
+        { hashtags: { $in: userBioInterests.map(tag => new RegExp(tag, 'i')) } },
+        { relatedTopics: { $in: userBioInterests.map(topic => new RegExp(topic, 'i')) } },
+        { userId: { $in: followingUserIds } }
+      ]
     };
 
     // Modify the query based on whether the user is a test user or not
     if (!user.isTestUser) {
-      const nonTestUserIds = await User.find({ isTestUser: false }, '_id').lean();
-      const nonTestUserIdArray = nonTestUserIds.map(user => user._id);
+      const nonTestUsers = await User.find({ isTestUser: false }, '_id').lean();
+      const nonTestUserIdArray = nonTestUsers.map(user => user._id);
       baseQuery = {
         ...baseQuery,
         $and: [
           baseQuery,
-          { userId: { $in: nonTestUserIdArray } },
-        ],
+          { userId: { $in: nonTestUserIdArray } }
+        ]
       };
     }
 
@@ -453,8 +457,6 @@ exports.getAllContent = async (req, res) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 };
-
-
 
   
 // Controller function to like a content item
@@ -785,13 +787,13 @@ exports.getHomepageContent = async (req, res) => {
     const followingUserIds = followingUsers.map(user => user._id);
 
     // Base query for homepage content
-    const baseQuery = {
+    let baseQuery = {
       userId: { $in: [...followingUserIds, userId] }
     };
 
     // Modify the query based on the test user status
     if (!user.isTestUser) {
-      const nonTestUsers = await User.find({ isTestUser: false }).select('_id');
+      const nonTestUsers = await User.find({ _id: { $in: followingUserIds }, isTestUser: false }).select('_id');
       const nonTestUserIds = nonTestUsers.map(user => user._id);
       baseQuery.userId = { $in: [...nonTestUserIds, userId] }; // Exclude test user content for non-test users
     }
@@ -838,6 +840,7 @@ exports.getHomepageContent = async (req, res) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 
 
 exports.deleteContent = async (req, res) => {
