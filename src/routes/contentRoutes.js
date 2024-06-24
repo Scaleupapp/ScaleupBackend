@@ -68,4 +68,7 @@ router.delete('/delete/:contentId', contentController.deleteContent);
 router.post('/view/:contentId', contentController.incrementViewCount);
 
 
+// route for deleting a comment by ID
+router.delete('/comments/:commentId', contentController.deleteComment);
+
 module.exports = router;
