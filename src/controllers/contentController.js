@@ -544,20 +544,20 @@ exports.likeContent = async (req, res) => {
   };
 
   // Controller function to add a comment
-exports.addComment = async (req, res) => {
-  try {
-    const { contentId, commentText } = req.body;
-
-    // Verify the user's identity using the JWT token
-    const token = req.headers.authorization.split(' ')[1];
+  exports.addComment = async (req, res) => {
+    try {
+      const { contentId, commentText } = req.body;
+  
+      // Verify the user's identity using the JWT token
+      const token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
-
-    // Get the user's ID from the decoded token
-    const userId = decoded.userId;
-
+  
+      // Get the user's ID from the decoded token
+      const userId = decoded.userId;
+  
       // Find the user by ID
       const user = await User.findById(userId);
-
+  
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
@@ -567,62 +567,74 @@ exports.addComment = async (req, res) => {
   
       if (!content) {
         return res.status(404).json({ error: 'Content not found' });
-    }
-
-    // Fetch the comment privileges of the content owner from UserSettings
-    const contentOwnerUserSettings = await UserSettings.findOne({ userId: content.userId });
-
-    if (!contentOwnerUserSettings) {
-      return res.status(404).json({ error: 'Content owner settings not found' });
-    }
-
-    const contentOwnerCommentPrivileges = contentOwnerUserSettings.commentPrivacy;
-
-    // Check if the user has privileges to comment based on the content owner's settings
-    if (
-      contentOwnerCommentPrivileges === 'everyone' ||
-      (contentOwnerCommentPrivileges === 'followers' && user.following.includes(content.username))
-    ) {
-      // Create a new comment document
-      const newComment = new Comment({
+      }
+  
+      // Fetch the comment privileges of the content owner from UserSettings
+      const contentOwnerUserSettings = await UserSettings.findOne({ userId: content.userId });
+  
+      if (!contentOwnerUserSettings) {
+        return res.status(404).json({ error: 'Content owner settings not found' });
+      }
+  
+      const contentOwnerCommentPrivileges = contentOwnerUserSettings.commentPrivacy;
+  
+      // Check if the user has privileges to comment based on the content owner's settings
+      if (
+        contentOwnerCommentPrivileges === 'everyone' ||
+        (contentOwnerCommentPrivileges === 'followers' && user.following.includes(content.username))
+      ) {
+        // Create a new comment document
+        const newComment = new Comment({
           contentId: contentId,
           userId: userId,
-        username: user.username,
+          username: user.username,
           commentText: commentText,
-      });
-
-      await newComment.save();
-
-      // Add the comment to the content's comments array
-      content.comments.push(newComment._id);
-      await content.save();
-
-      // Update the CommentCount in the content model
-      content.CommentCount = content.comments.length;
-      await content.save();
-
-      // Create a notification for the content owner
-      if (content.userId.toString() !== userId) {
+        });
+  
+        await newComment.save();
+  
+        // Add the comment to the content's comments array
+        content.comments.push(newComment._id);
+        await content.save();
+  
+        // Update the CommentCount in the content model
+        content.CommentCount = content.comments.length;
+        await content.save();
+  
+        // Create a notification for the content owner
+        if (content.userId.toString() !== userId) {
           // Don't create a notification if the comment is on the user's own content
-        const recipientId = content.userId; // The user who owns the post
-        const senderId = userId; // The user who commented
-        const type = 'comment'; // Notification type
-        const notificationContent = `${user.username} commented on your post.`; // Notification content
-        const link = `/api/content/post/${contentId}`; // Link to the commented post
-
-        await createNotification(recipientId, senderId, type, notificationContent, link);
+          const recipientId = content.userId; // The user who owns the post
+          const senderId = userId; // The user who commented
+          const type = 'comment'; // Notification type
+          const notificationContent = `${user.username} commented on your post.`; // Notification content
+          const link = `/api/content/post/${contentId}`; // Link to the commented post
+  
+          await createNotification(recipientId, senderId, type, notificationContent, link);
+        }
+  
+        res.status(200).json({
+          message: 'Comment added successfully',
+          comment: {
+            _id: newComment._id,
+            contentId: contentId,
+            userId: userId,
+            username: user.username,
+            profilePicture: user.profilePicture,
+            commentText: commentText,
+            commentDate: newComment.commentDate,
+          },
+        });
+      } else {
+        res.status(403).json({ error: 'You do not have the necessary privileges to comment on this content' });
       }
-
-      res.status(200).json({ message: 'Comment added successfully' });
-    } else {
-      res.status(403).json({ error: 'You do not have the necessary privileges to comment on this content' });
+    } catch (error) {
+      Sentry.captureException(error);
+      console.error('Comment creation error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
-  } catch (error) {
-    Sentry.captureException(error);
-    console.error('Comment creation error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
+  };
+  
 
 
 // Controller function to get content details by content ID
