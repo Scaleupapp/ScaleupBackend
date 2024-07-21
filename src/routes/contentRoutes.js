@@ -67,8 +67,13 @@ router.delete('/delete/:contentId', contentController.deleteContent);
 // New route for incrementing the view count of a video content
 router.post('/view/:contentId', contentController.incrementViewCount);
 
-
 // route for deleting a comment by ID
 router.delete('/comments/:commentId', contentController.deleteComment);
+
+// routes for saving and unsaving content
+router.put('/save/:contentId', contentController.saveContent);
+router.put('/unsave/:contentId', contentController.unsaveContent);
+router.get('/saved-content', contentController.getSavedContent);
+
 
 module.exports = router;

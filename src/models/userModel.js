@@ -140,6 +140,13 @@ const userSchema = new mongoose.Schema({
     default: false,
   },
 
+  savedContent: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Content',
+    },
+  ],
+
 }, {
   collection: 'Users' // Specify the collection name here
 });

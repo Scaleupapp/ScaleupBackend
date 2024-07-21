@@ -971,6 +971,86 @@ exports.deleteComment = async (req, res) => {
 };
 
 
+exports.saveContent = async (req, res) => {
+  try {
+    const { contentId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret);
+    const userId = decoded.userId;
+
+    const content = await Content.findById(contentId);
+    if (!content) {
+      return res.status(404).json({ error: 'Content not found' });
+    }
+
+    // Check if the user is trying to save their own content
+    if (content.userId.toString() === userId) {
+      return res.status(400).json({ error: 'You cannot save your own content' });
+    }
+
+    const user = await User.findById(userId);
+
+    // Check if the content is already saved
+    const isAlreadySaved = user.savedContent.some(
+      (savedContent) => savedContent.toString() === contentId
+    );
+
+    if (isAlreadySaved) {
+      return res.status(400).json({ error: 'Content is already saved' });
+    }
+
+    user.savedContent.push(contentId);
+    await user.save();
+
+    res.json({ message: 'Content saved successfully' });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error saving content:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+
+exports.unsaveContent = async (req, res) => {
+  try {
+    const { contentId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret);
+    const userId = decoded.userId;
+
+    const content = await Content.findById(contentId);
+    if (!content) {
+      return res.status(404).json({ error: 'Content not found' });
+    }
+
+    await User.findByIdAndUpdate(userId, { $pull: { savedContent: contentId } });
+    res.json({ message: 'Content unsaved successfully' });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error unsaving content:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.getSavedContent = async (req, res) => {
+  try {
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret);
+    const userId = decoded.userId;
+
+    const user = await User.findById(userId).populate('savedContent');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json(user.savedContent);
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error fetching saved content:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 
 
 
