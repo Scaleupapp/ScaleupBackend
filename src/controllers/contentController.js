@@ -691,7 +691,7 @@ exports.getPostDetails = async (req, res) => {
   }
 };
 
-async function createNotification(recipientId, senderId, type, content, link) {
+exports.createNotification = async (recipientId, senderId, type, content, link) => {
   const newNotification = new Notification({
     recipient: recipientId,
     sender: senderId,
@@ -701,7 +701,7 @@ async function createNotification(recipientId, senderId, type, content, link) {
   });
 
   await newNotification.save();
-}
+};
 
 // Controller function to retrieve notifications for the logged-in user
 exports.getNotifications = async (req, res) => {

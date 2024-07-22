@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
+const { Schema } = mongoose;
 
-// Define the User schema
+const innerCircleRequestSchema = new Schema({
+  userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  status: { type: String, default: 'Pending' },
+});
+
 const userSchema = new mongoose.Schema({
   username: {
     type: String,
@@ -146,7 +151,8 @@ const userSchema = new mongoose.Schema({
       ref: 'Content',
     },
   ],
-
+  innerCircle: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+  innerCircleRequests: [innerCircleRequestSchema],
 }, {
   collection: 'Users' // Specify the collection name here
 });

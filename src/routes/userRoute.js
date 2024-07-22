@@ -8,6 +8,7 @@ const coursesController = require('../controllers/coursesController');
 const certificationsController = require('../controllers/certificationsController');
 const userProfileController = require('../controllers/userProfileController');
 const settingsController = require('../controllers/settingsController');
+const userSearchController = require('../controllers/userSearchController');
 
 const multer = require('multer');
 
@@ -68,5 +69,11 @@ router.post('/submitfeedback', upload.single('attachmentFile'),settingsControlle
 // Get feedback status route
 router.get('/feedback/status', settingsController.getFeedbackStatus);
 
+// Inner Circle Routes
+router.post('/inner-circle/request', userSearchController.sendInnerCircleRequests);
+router.post('/inner-circle/handle-request', userSearchController.handleInnerCircleRequest);
+router.post('/inner-circle/remove', userSearchController.removeInnerCircle);
+router.get('/inner-circle', userSearchController.getInnerCircleUsers);
+router.get('/inner-circle/requests', userSearchController.getInnerCircleRequests);
 
 module.exports = router;

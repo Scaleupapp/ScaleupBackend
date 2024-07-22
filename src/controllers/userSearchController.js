@@ -353,4 +353,205 @@ exports.getUserDetails = async (req, res) => {
       res.status(500).json({ error: 'Internal server error' });
     }
   };
+
+  exports.sendInnerCircleRequests = async (req, res) => {
+    try {
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, jwtSecret);
+      const userId = decoded.userId;
+      const { targetUserIds } = req.body; // Expecting an array of targetUserIds
+  
+      if (!userId || !Array.isArray(targetUserIds) || targetUserIds.length === 0) {
+        return res.status(400).json({ message: 'Invalid user IDs' });
+      }
+  
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+  
+      const errors = [];
+      for (const targetUserId of targetUserIds) {
+        const targetUser = await User.findById(targetUserId);
+  
+        if (!targetUser) {
+          errors.push(`User not found: ${targetUserId}`);
+          continue;
+        }
+  
+        if (!user.following.includes(targetUser.username) && !user.followers.includes(targetUser.username)) {
+          errors.push(`User must be in following or follower list: ${targetUser.username}`);
+          continue;
+        }
+  
+        if (user.innerCircle.includes(targetUserId)) {
+          errors.push(`User already in Inner Circle: ${targetUser.username}`);
+          continue;
+        }
+  
+        const pendingRequest = targetUser.innerCircleRequests.some(
+          request => request.userId.toString() === userId
+        );
+  
+        if (pendingRequest) {
+          errors.push(`Request already pending for user: ${targetUser.username}`);
+          continue;
+        }
+  
+        const existingRequestFromTargetUser = user.innerCircleRequests.some(
+          request => request.userId.toString() === targetUserId
+        );
+  
+        if (existingRequestFromTargetUser) {
+          errors.push(`Existing request from user: ${targetUser.username}`);
+          continue;
+        }
+  
+        targetUser.innerCircleRequests.push({ userId: userId });
+        await targetUser.save();
+  
+        await createNotification(targetUser._id, user._id, 'InnerCircleRequest', `You have a new Inner Circle request from ${user.username}.`);
+      }
+  
+      if (errors.length > 0) {
+        return res.status(400).json({ message: 'Some requests failed', errors });
+      }
+  
+      res.status(200).json({ message: 'Inner Circle requests sent' });
+    } catch (error) {
+      Sentry.captureException(error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  };
+  
+  exports.handleInnerCircleRequest = async (req, res) => {
+    try {
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, jwtSecret);
+      const userId = decoded.userId;
+      const { requestId, action } = req.body;
+  
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+  
+      const request = user.innerCircleRequests.id(requestId);
+      if (!request) {
+        return res.status(404).json({ message: 'Request not found' });
+      }
+  
+      const requester = await User.findById(request.userId);
+      if (!requester) {
+        return res.status(404).json({ message: 'Requester not found' });
+      }
+  
+      if (action === 'accept') {
+        user.innerCircle.push(request.userId);
+        requester.innerCircle.push(userId);
+        request.status = 'Accepted';
+        await createNotification(request.userId, userId, 'InnerCircleAccepted', `Your Inner Circle request was accepted by ${user.username}.`);
+      } else {
+        request.status = 'Rejected';
+      }
+  
+      // Remove the request from innerCircleRequests list
+      user.innerCircleRequests = user.innerCircleRequests.filter(req => req._id.toString() !== requestId);
+  
+      await user.save();
+      await requester.save();
+  
+      res.status(200).json({ message: 'Request handled successfully' });
+    } catch (error) {
+      Sentry.captureException(error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  };
+  
+  
+  
+  exports.removeInnerCircle = async (req, res) => {
+    try {
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, jwtSecret);
+      const userId = decoded.userId;
+      const { targetUserId } = req.body;
+  
+      const user = await User.findById(userId);
+      const targetUser = await User.findById(targetUserId);
+  
+      if (!user || !targetUser) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+  
+      user.innerCircle = user.innerCircle.filter(id => id.toString() !== targetUserId);
+      targetUser.innerCircle = targetUser.innerCircle.filter(id => id.toString() !== userId);
+  
+      await user.save();
+      await targetUser.save();
+  
+      res.status(200).json({ message: 'User removed from Inner Circle' });
+    } catch (error) {
+      Sentry.captureException(error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  };
+
+  exports.getInnerCircleUsers = async (req, res) => {
+    try {
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, jwtSecret);
+      const userId = decoded.userId;
+  
+      const user = await User.findById(userId).populate('innerCircle', 'username firstname lastname profilePicture');
+  
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+  
+      const innerCircleUsers = user.innerCircle.map(innerCircleUser => ({
+        username: innerCircleUser.username,
+        firstname: innerCircleUser.firstname,
+        lastname: innerCircleUser.lastname,
+        profilePicture: innerCircleUser.profilePicture,
+        userId: innerCircleUser._id
+      }));
+  
+      res.status(200).json(innerCircleUsers);
+    } catch (error) {
+      Sentry.captureException(error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  };
+
+  exports.getInnerCircleRequests = async (req, res) => {
+    try {
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, jwtSecret);
+      const userId = decoded.userId;
+  
+      const user = await User.findById(userId).populate('innerCircleRequests.userId', 'username firstname lastname profilePicture');
+  
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+  
+      const innerCircleRequests = user.innerCircleRequests.map(request => ({
+        id: request._id,
+        userId: request.userId._id,
+        username: request.userId.username,
+        firstname: request.userId.firstname,
+        lastname: request.userId.lastname,
+        profilePicture: request.userId.profilePicture,
+        status: request.status,
+      }));
+  
+      res.status(200).json(innerCircleRequests);
+    } catch (error) {
+      Sentry.captureException(error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  };
+  
+  
   
