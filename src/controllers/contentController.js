@@ -1051,6 +1051,43 @@ exports.getSavedContent = async (req, res) => {
   }
 };
 
+exports.updateContentFields = async (req, res) => {
+  try {
+    const { contentId } = req.params;
+    const { captions, relatedTopics, hashtags } = req.body;
+
+    // Verify the user's identity using the JWT token
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret);
+    const userId = decoded.userId;
+
+    // Find the content by ID
+    const content = await Content.findById(contentId);
+
+    if (!content) {
+      return res.status(404).json({ error: 'Content not found' });
+    }
+
+    // Verify the user attempting to update the content is the owner
+    if (content.userId.toString() !== userId) {
+      return res.status(403).json({ message: 'You do not have permission to update this content' });
+    }
+
+    // Update the fields
+    if (captions !== undefined) content.captions = captions;
+    if (relatedTopics !== undefined) content.relatedTopics = relatedTopics.split(',').map(topic => topic.trim());
+    if (hashtags !== undefined) content.hashtags = hashtags.split(',').map(tag => tag.trim());
+
+    // Save the updated content
+    await content.save();
+
+    res.json({ message: 'Content updated successfully', content });
+  } catch (error) {
+    console.error('Error updating content fields:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 
 
 

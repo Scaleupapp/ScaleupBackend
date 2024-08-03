@@ -75,5 +75,8 @@ router.put('/save/:contentId', contentController.saveContent);
 router.put('/unsave/:contentId', contentController.unsaveContent);
 router.get('/saved-content', contentController.getSavedContent);
 
+// Add a route for updating specific fields of a content item
+router.put('/update/:contentId', contentController.updateContentFields);
+
 
 module.exports = router;
