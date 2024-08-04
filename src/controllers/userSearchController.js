@@ -261,7 +261,7 @@ exports.getUserDetails = async (req, res) => {
         const notificationContent = ` ${followerUser.username} followed you .`; // Notification content
         const link = `/api/content/detail/${followerUserId}`; // Link to the liked post
   
-     //  await createNotification(recipientId, senderId, type, notificationContent, link);
+       await exports.createNotification(recipientId, senderId, type, notificationContent, link);
     
         res.status(200).json({ message: 'You are now following this user' });
       } catch (error) {
@@ -410,7 +410,7 @@ exports.getUserDetails = async (req, res) => {
         targetUser.innerCircleRequests.push({ userId: userId });
         await targetUser.save();
   
-        await createNotification(targetUser._id, user._id, 'InnerCircleRequest', `You have a new Inner Circle request from ${user.username}.`);
+        await exports.createNotification(targetUser._id, user._id, 'InnerCircleRequest', `You have a new Inner Circle request from ${user.username}.`);
       }
   
       if (errors.length > 0) {
@@ -450,7 +450,7 @@ exports.getUserDetails = async (req, res) => {
         user.innerCircle.push(request.userId);
         requester.innerCircle.push(userId);
         request.status = 'Accepted';
-        await createNotification(request.userId, userId, 'InnerCircleAccepted', `Your Inner Circle request was accepted by ${user.username}.`);
+        await exports.createNotification(request.userId, userId, 'InnerCircleAccepted', `Your Inner Circle request was accepted by ${user.username}.`);
       } else {
         request.status = 'Rejected';
       }

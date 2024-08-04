@@ -55,6 +55,12 @@ const contentSchema = new mongoose.Schema({
   smeComments: {
     type: String,
   },
+  smeCommentsHistory: [
+    {
+      comment: String,
+      date: { type: Date, default: Date.now },
+    },
+  ],
   contentType: {
     type: String,
   },
@@ -64,7 +70,7 @@ const contentSchema = new mongoose.Schema({
   },
   smeVerify: {
     type: String,
-    enum: ['NA', 'Pending', 'Accepted', 'Rejected'],
+    enum: ['NA', 'Pending', 'Accepted', 'Rejected','Revise'],
   },
   views: [
     {

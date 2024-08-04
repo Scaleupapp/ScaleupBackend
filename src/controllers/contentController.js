@@ -89,126 +89,59 @@ exports.addContent = async (req, res) => {
   }
 };
 
-/*
 exports.listPendingVerificationContent = async (req, res) => {
   try {
-      // Verify the user's identity using the JWT token
-      const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
-
-      // Get the user's ID from the decoded token
-      const userId = decoded.userId;
-
-      // Find the user by ID
-      const user = await User.findById(userId);
-
-      if (!user) {
-          return res.status(404).json({ error: 'User not found' });
-      }
-
-      // Check if the user is an SME
-      if (user.role !== 'Subject Matter Expert') {
-          return res.status(403).json({ message: 'Access denied' });
-      }
-
-      // Get the user's bio interests
-      const userBioInterests = user.bio.bioInterests;
-
-      const page = parseInt(req.query.page) || 1;
-      const pageSize = parseInt(req.query.pageSize) || 10; // Default page size
-      const skip = (page - 1) * pageSize;
-
-      // Query for pending verification content with pagination
-      const pendingContent = await Content.find({
-          smeVerify: 'Pending', // Filter by pending verification status
-          userId: { $nin: await User.find({ role: 'Subject Matter Expert' }).select('_id') }, // Exclude content from users with the SME role
-          $or: [
-              { hashtags: { $in: userBioInterests.map(tag => tag.replace('#', '')) } }, // Match hashtags
-              { relatedTopics: { $in: userBioInterests } }, // Match related topics
-          ],
-      })
-          .select('username postdate relatedTopics hashtags _id captions heading contentURL rating smeVerify smeComments contentType userId')
-          .populate('userId', 'username totalRating profilePicture') // Populate user data for content author
-          .sort({ postdate: -1 }) // Sort by postdate in descending order
-          .skip(skip)
-          .limit(pageSize);
-
-      res.json({ pendingContent });
-  } catch (error) {
-    Sentry.captureException(error);
-      console.error('Error listing pending content:', error);
-      res.status(500).json({ message: 'Internal server error' });
-  }
-};
-*/
-
-exports.listPendingVerificationContent = async (req, res) => {
-  try {
-    // Verify the user's identity using the JWT token
     const token = req.headers.authorization.split(' ')[1];
-    const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
-
-    // Get the user's ID from the decoded token
+    const decoded = jwt.verify(token, jwtSecret);
     const userId = decoded.userId;
 
-    // Find the user by ID
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Check if the user is an SME
     if (user.role !== 'Subject Matter Expert') {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    // Get the user's bio interests
     const userBioInterests = user.bio.bioInterests.map(interest => interest.toLowerCase());
 
-    // Pagination parameters
     const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 10; // Default page size
+    const pageSize = parseInt(req.query.pageSize) || 10;
     const skip = (page - 1) * pageSize;
 
-    // Exclude content from users with the SME role
     const smeUsers = await User.find({ role: 'Subject Matter Expert' }, '_id').lean();
     const smeUserIds = smeUsers.map(user => user._id);
 
-    // Build the base query
     let baseQuery = {
-      smeVerify: 'Pending', // Filter by pending verification status
-      userId: { $nin: smeUserIds }, // Exclude content from users with the SME role
+      smeVerify: { $in: ['Pending', ] }, 
+      userId: { $nin: smeUserIds },
       $or: [
-        { hashtags: { $in: userBioInterests.map(tag => new RegExp(tag, 'i')) } }, // Match hashtags (case-insensitive)
-        { relatedTopics: { $in: userBioInterests.map(topic => new RegExp(topic, 'i')) } } // Match related topics (case-insensitive)
+        { hashtags: { $in: userBioInterests.map(tag => new RegExp(tag, 'i')) } },
+        { relatedTopics: { $in: userBioInterests.map(topic => new RegExp(topic, 'i')) } }
       ],
     };
 
-    // Modify the query based on the test user status
     if (!user.isTestUser) {
       const nonTestUsers = await User.find({ isTestUser: false }, '_id').lean();
       const nonTestUserIds = nonTestUsers.map(user => user._id);
       baseQuery = {
         ...baseQuery,
-        userId: { $nin: smeUserIds, $in: nonTestUserIds }, // Exclude test user content for non-test users
+        userId: { $nin: smeUserIds, $in: nonTestUserIds },
       };
     }
 
-    // Calculate total number of pending verification content
     const totalPendingContent = await Content.countDocuments(baseQuery);
 
-    // Query for pending verification content with pagination
     const pendingContent = await Content.find(baseQuery)
-      .select('username postdate relatedTopics hashtags _id captions heading contentURL rating smeVerify smeComments contentType userId')
+      .select('username postdate relatedTopics hashtags _id captions heading contentURL rating smeVerify smeComments smeCommentsHistory contentType userId')
       .populate('userId', 'username totalRating profilePicture')
       .sort({ postdate: -1 })
       .skip(skip)
       .limit(pageSize);
 
-    // Calculate total pages
     const totalPages = Math.ceil(totalPendingContent / pageSize);
 
-    // Send the response with pagination details
     res.json({
       pendingContent,
       pagination: {
@@ -225,80 +158,88 @@ exports.listPendingVerificationContent = async (req, res) => {
   }
 };
 
-
-
-// New controller for updating content rating and verification
+// controller for updating content rating and verification
 exports.updateContentRatingAndVerification = async (req, res) => {
-    try {
-        const { contentId } = req.params;
-        const { rating, smeVerify, smeComments } = req.body;
+  try {
+    const { contentId } = req.params;
+    const { rating, smeVerify, smeComments } = req.body;
 
-        // Verify the user's identity using the JWT token
-        const token = req.headers.authorization.split(' ')[1];
-        const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret);
+    const userId = decoded.userId;
 
-        // Get the user's ID from the decoded token
-        const userId = decoded.userId;
+    const content = await Content.findById(contentId);
 
-        // Find the content by ID
-        const content = await Content.findById(contentId);
+    if (!content) {
+      return res.status(404).json({ error: 'Content not found' });
+    }
 
-        if (!content) {
-            return res.status(404).json({ error: 'Content not found' });
-        }
+    const user = await User.findById(userId);
 
-        // Check if the logged-in user is an SME
-        const user = await User.findById(userId);
+    if (!user || user.role !== 'Subject Matter Expert') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
 
-        if (!user || user.role !== 'Subject Matter Expert') {
-            return res.status(403).json({ message: 'Access denied' });
-        }
+    if (smeVerify === 'Revise') {
+      if (content.revisionCount >= 2) {
+        return res.status(400).json({ message: 'Maximum revisions reached. Only Approve or Reject is allowed.' });
+      }
 
-        // Update content rating and verification
+      content.smeVerify = 'Revise';
+      content.smeComments = smeComments;
+      content.revisionCount += 1;
+      content.smeCommentsHistory.push({ comment: smeComments });
+    } else {
+      if (content.revisionCount >= 2 && smeVerify !== 'Accepted' && smeVerify !== 'Rejected') {
+        return res.status(400).json({ message: 'Only Approve or Reject is allowed after 2 revisions.' });
+      }
+
+      content.smeVerify = smeVerify;
+      content.smeComments = smeComments;
+      content.smeCommentsHistory.push({ comment: smeComments });
+
+      if (smeVerify === 'Accepted') {
         content.rating = rating;
-        content.smeVerify = smeVerify;
-        content.smeComments = smeComments;
-
-        await content.save();
-
-        // Update the totalRating for the content author
         const contentAuthor = await User.findById(content.userId);
 
         if (contentAuthor) {
-            contentAuthor.totalRating += rating;
-            await contentAuthor.save();
+          contentAuthor.totalRating += rating;
+          await contentAuthor.save();
 
-            // Update the badge based on totalRating
-            if (contentAuthor.totalRating >= 1000) {
-                contentAuthor.badges = 'Subject Matter Expert';
-            } else if (contentAuthor.totalRating >= 600) {
-                contentAuthor.badges = 'Influencer';
-            } else if (contentAuthor.totalRating >= 300) {
-                contentAuthor.badges = 'Specialist';
-            } else if (contentAuthor.totalRating >= 150) {
-                contentAuthor.badges = 'Creator';
-            } else if (contentAuthor.totalRating >= 10) {
-                contentAuthor.badges = 'Explorer';
-            }
-
-            // Don't create a notification if the user is liking their own content
-      const recipientId = content.userId; // The user who owns the content
-      const senderId = userId; 
-      const type = 'Content Validation '; // Notification type
-      const notificationContent = `SME has ${smeVerify} your post.`; // Notification content
-      const link = `/api/content/post/${contentId}`; // Link to the liked post
-
-      await createNotification(recipientId, senderId, type, notificationContent, link);
-     await contentAuthor.save();
+          if (contentAuthor.totalRating >= 1000) {
+            contentAuthor.badges = 'Subject Matter Expert';
+          } else if (contentAuthor.totalRating >= 600) {
+            contentAuthor.badges = 'Influencer';
+          } else if (contentAuthor.totalRating >= 300) {
+            contentAuthor.badges = 'Specialist';
+          } else if (contentAuthor.totalRating >= 150) {
+            contentAuthor.badges = 'Creator';
+          } else if (contentAuthor.totalRating >= 10) {
+            contentAuthor.badges = 'Explorer';
+          }
+          await contentAuthor.save();
         }
-
-        res.json({ message: 'Content rating and verification updated successfully' });
-    } catch (error) {
-      Sentry.captureException(error);
-        console.error('Content rating and verification update error:', error);
-        res.status(500).json({ error: 'Internal server error' });
+      }
     }
+
+    await content.save();
+
+    const recipientId = content.userId;
+    const senderId = userId;
+    const type = 'Content Validation';
+    const notificationContent = `SME has ${smeVerify} your post.`;
+    const link = `/api/content/post/${contentId}`;
+
+    await exports.createNotification(recipientId, senderId, type, notificationContent, link);
+
+    res.json({ message: 'Content verification updated successfully' });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Content verification update error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 };
+
 
 // Controller function to get content details by content ID for verfification
 exports.getContentDetails = async (req, res) => {
@@ -496,7 +437,7 @@ exports.likeContent = async (req, res) => {
       const notificationContent = `${liker.username} liked your post.`; // Notification content
       const link = `/api/content/post/${contentId}`; // Link to the liked post
 
-      await createNotification(recipientId, senderId, type, notificationContent, link);
+      await exports.createNotification(recipientId, senderId, type, notificationContent, link);
     }
 
     // Return the updated likeCount
@@ -610,7 +551,7 @@ exports.likeContent = async (req, res) => {
           const notificationContent = `${user.username} commented on your post.`; // Notification content
           const link = `/api/content/post/${contentId}`; // Link to the commented post
   
-          await createNotification(recipientId, senderId, type, notificationContent, link);
+          await exports.createNotification(recipientId, senderId, type, notificationContent, link);
         }
   
         res.status(200).json({
@@ -1056,29 +997,29 @@ exports.updateContentFields = async (req, res) => {
     const { contentId } = req.params;
     const { captions, relatedTopics, hashtags } = req.body;
 
-    // Verify the user's identity using the JWT token
     const token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, jwtSecret);
     const userId = decoded.userId;
 
-    // Find the content by ID
     const content = await Content.findById(contentId);
 
     if (!content) {
       return res.status(404).json({ error: 'Content not found' });
     }
 
-    // Verify the user attempting to update the content is the owner
     if (content.userId.toString() !== userId) {
       return res.status(403).json({ message: 'You do not have permission to update this content' });
     }
 
-    // Update the fields
     if (captions !== undefined) content.captions = captions;
     if (relatedTopics !== undefined) content.relatedTopics = relatedTopics.split(',').map(topic => topic.trim());
     if (hashtags !== undefined) content.hashtags = hashtags.split(',').map(tag => tag.trim());
 
-    // Save the updated content
+    // Reset smeVerify to Pending only if verify is Yes
+    if (content.verify === 'Yes') {
+      content.smeVerify = 'Pending';
+    }
+
     await content.save();
 
     res.json({ message: 'Content updated successfully', content });
@@ -1087,6 +1028,7 @@ exports.updateContentFields = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
 
 
 
