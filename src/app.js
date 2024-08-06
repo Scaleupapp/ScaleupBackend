@@ -1,10 +1,12 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const app = express();
+const http = require("http");
+const socketIo = require("socket.io");
 const aws = require("aws-sdk");
 const bodyParser = require("body-parser");
-const jwt = require("jsonwebtoken"); // Import JWT module
-const userRoute = require("./routes/userRoute"); // Import userRoute
+const jwt = require("jsonwebtoken");
+const userRoute = require("./routes/userRoute");
 const authRoute = require("./routes/authRoute");
 const contentRoute = require("./routes/contentRoutes");
 const cors = require("cors");
@@ -35,15 +37,10 @@ const twilioClient = twilio(twilioAccountSid, twilioAuthToken);
 Sentry.init({
   dsn: "https://70a3fa133c98e18ff07f83ec9eb6e281@o4506403653222400.ingest.sentry.io/4506404787781632",
   integrations: [
-    // enable HTTP calls tracing
     new Sentry.Integrations.Http({ tracing: true }),
-    // enable Express.js middleware tracing
     new Sentry.Integrations.Express({ app }),
-    
   ],
-  // Performance Monitoring
-  tracesSampleRate: 1.0, //  Capture 100% of the transactions
-  // Set sampling rate for profiling - this is relative to tracesSampleRate
+  tracesSampleRate: 1.0,
   profilesSampleRate: 1.0,
 });
 
@@ -54,10 +51,6 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: "Something went wrong." });
 });
 
-
-app.set("view engine", "ejs");
-
-// Connect to your MongoDB database
 mongoose
   .connect(mongodbUri, {
     useNewUrlParser: true,
@@ -70,13 +63,58 @@ mongoose
     console.error("Error connecting to MongoDB: " + error);
   });
 
-// Define your routes and middleware
-app.use("/api/auth", authRoute); // Use the auth route
-app.use("/api/users", userRoute); // Use the user route
+app.use("/api/auth", authRoute);
+app.use("/api/users", userRoute);
 app.use("/api/content", contentRoute);
 app.use("/api/chat", chatRouter);
 app.use("/api/conversation", conversationRouter);
-// Start the server
-app.listen(PORT, () => {
+
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: "*", // Allow any origin for simplicity. You can restrict this to specific origins as needed.
+    methods: ["GET", "POST"],
+  },
+});
+
+io.on("connection", (socket) => {
+  console.log("New client connected");
+
+  socket.on("joinConversation", (conversationId) => {
+    socket.join(conversationId);
+    console.log(`User joined conversation: ${conversationId}`);
+  });
+
+  socket.on("sendMessage", (data) => {
+    const { conversationId, message, token } = data;
+    const decoded = jwt.verify(token, jwtSecret);
+    const sender = decoded.userId;
+
+    // Emit to the conversation room
+    io.to(conversationId).emit("receiveMessage", {
+      conversationId,
+      message,
+      sender,
+    });
+
+    // Save the message in the database
+    const newMessage = new Message({
+      conversationId,
+      sender,
+      message,
+    });
+
+    newMessage.save().catch((error) => console.error("Error saving message:", error));
+  });
+
+  socket.on("disconnect", () => {
+    console.log("Client disconnected");
+  });
+});
+
+const chatController = require("./controllers/chatController");
+chatController.setSocketIo(io);
+
+server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
