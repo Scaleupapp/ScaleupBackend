@@ -78,5 +78,11 @@ router.get('/saved-content', contentController.getSavedContent);
 // Add a route for updating specific fields of a content item
 router.put('/update/:contentId', contentController.updateContentFields);
 
+// Add new routes for commenting on a comment, liking a comment, and unliking a comment
+router.post('/comments/reply', contentController.addReply);
+router.post('/comments/like/:commentId', contentController.likeComment);
+router.post('/comments/unlike/:commentId', contentController.unlikeComment);
+
+
 
 module.exports = router;

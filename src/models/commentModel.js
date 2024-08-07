@@ -1,5 +1,3 @@
-// models/commentModel.js
-
 const mongoose = require('mongoose');
 
 const commentSchema = new mongoose.Schema({
@@ -16,6 +14,27 @@ const commentSchema = new mongoose.Schema({
   commentDate: {
     type: Date,
     default: Date.now,
+  },
+  parentCommentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Comment', // Reference the Comment model
+    default: null,
+  },
+  replies: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Comment', // Reference the Comment model
+    },
+  ],
+  likes: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User', // Reference the User model
+    },
+  ],
+  likeCount: {
+    type: Number,
+    default: 0,
   },
 });
 

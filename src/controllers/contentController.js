@@ -1029,6 +1029,159 @@ exports.updateContentFields = async (req, res) => {
   }
 };
 
+// Controller function to add a reply to a comment
+exports.addReply = async (req, res) => {
+  try {
+    const { contentId, commentText, parentCommentId } = req.body;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const content = await Content.findById(contentId);
+    if (!content) {
+      return res.status(404).json({ error: 'Content not found' });
+    }
+
+    const parentComment = await Comment.findById(parentCommentId);
+    if (!parentComment) {
+      return res.status(404).json({ error: 'Parent comment not found' });
+    }
+
+    const contentOwnerUserSettings = await UserSettings.findOne({ userId: content.userId });
+    if (!contentOwnerUserSettings) {
+      return res.status(404).json({ error: 'Content owner settings not found' });
+    }
+
+    const contentOwnerCommentPrivileges = contentOwnerUserSettings.commentPrivacy;
+    if (
+      contentOwnerCommentPrivileges === 'everyone' ||
+      (contentOwnerCommentPrivileges === 'followers' && user.following.includes(content.username))
+    ) {
+      const newComment = new Comment({
+        contentId: contentId,
+        userId: userId,
+        username: user.username,
+        commentText: commentText,
+        parentCommentId: parentCommentId,
+      });
+
+      await newComment.save();
+
+      parentComment.replies.push(newComment._id);
+      await parentComment.save();
+
+      content.comments.push(newComment._id);
+      await content.save();
+
+      content.CommentCount = content.comments.length;
+      await content.save();
+
+      if (content.userId.toString() !== userId) {
+        const recipientId = content.userId;
+        const senderId = userId;
+        const type = 'reply';
+        const notificationContent = `${user.username} replied to your comment.`;
+        const link = `/api/content/post/${contentId}`;
+
+        await exports.createNotification(recipientId, senderId, type, notificationContent, link);
+      }
+
+      res.status(200).json({
+        message: 'Reply added successfully',
+        comment: {
+          _id: newComment._id,
+          contentId: contentId,
+          userId: userId,
+          username: user.username,
+          profilePicture: user.profilePicture,
+          commentText: commentText,
+          commentDate: newComment.commentDate,
+        },
+      });
+    } else {
+      res.status(403).json({ error: 'You do not have the necessary privileges to comment on this content' });
+    }
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Reply creation error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+
+// Controller function to like a comment
+exports.likeComment = async (req, res) => {
+  try {
+    const { commentId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    const comment = await Comment.findByIdAndUpdate(
+      commentId,
+      { $addToSet: { likes: userId } },
+      { new: true }
+    );
+
+    if (!comment) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+
+    comment.likeCount = comment.likes.length;
+    await comment.save();
+
+    if (comment.userId.toString() !== userId) {
+      const liker = await User.findById(userId);
+      const recipientId = comment.userId;
+      const senderId = userId;
+      const type = 'like';
+      const notificationContent = `${liker.username} liked your comment.`;
+      const link = `/api/content/comment/${commentId}`;
+
+      await exports.createNotification(recipientId, senderId, type, notificationContent, link);
+    }
+
+    res.json({ likeCount: comment.likeCount });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error liking comment:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Controller function to unlike a comment
+exports.unlikeComment = async (req, res) => {
+  try {
+    const { commentId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    const comment = await Comment.findByIdAndUpdate(
+      commentId,
+      { $pull: { likes: userId } },
+      { new: true }
+    );
+
+    if (!comment) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+
+    comment.likeCount = comment.likes.length;
+    await comment.save();
+
+    res.json({ likeCount: comment.likeCount });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error unliking comment:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 
 
 
