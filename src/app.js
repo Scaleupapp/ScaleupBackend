@@ -11,8 +11,8 @@ const authRoute = require("./routes/authRoute");
 const contentRoute = require("./routes/contentRoutes");
 const cors = require("cors");
 const twilio = require("twilio");
-const chatRouter = require("./routes/chatRoute");
-const conversationRouter = require("./routes/conversationRoute");
+const chatRoute = require("./routes/chatRoute");
+const conversationRoute = require("./routes/conversationRoute");
 const Sentry = require("@sentry/node");
 require("dotenv").config();
 
@@ -66,8 +66,8 @@ mongoose
 app.use("/api/auth", authRoute);
 app.use("/api/users", userRoute);
 app.use("/api/content", contentRoute);
-app.use("/api/chat", chatRouter);
-app.use("/api/conversation", conversationRouter);
+app.use("/api/chat", chatRoute);
+app.use("/api/conversation", conversationRoute);
 
 const server = http.createServer(app);
 const io = socketIo(server, {
