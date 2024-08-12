@@ -1,7 +1,8 @@
 const User = require('../models/userModel');
 const mongoose = require('mongoose');
 const Content = require('../models/contentModel');
-//const createNotification = require('../controllers/contentController').createNotification;
+const ProfileView = require('../models/profileViewModel'); // Import the ProfileView model
+const InterestView = require('../models/interestViewModel'); // Import the InterestView model
 const jwt = require('jsonwebtoken');
 const { createNotification } = require('./contentController');
 const Sentry = require('@sentry/node');
@@ -115,18 +116,37 @@ exports.getUserDetails = async (req, res) => {
     const { userId } = req.params;
     const token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, jwtSecret);
-
     const loggedUserId = decoded.userId;
-    const user = await User.findById(userId).select('profilePicture username firstname lastname email phoneNumber bio.bioInterests education workExperience courses certifications badges dateOfBirth location bio.bioAbout followers following followersCount followingCount role blockedUsers');
 
-    if (!user) {
+    const targetUser = await User.findById(userId).select('bio.bioInterests');
+    const loggedInUser = await User.findById(loggedUserId);
+
+    if (!targetUser || !loggedInUser) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const targetUser = await User.findById(userId);
-    const loggedInUser = await User.findById(loggedUserId);
-    if (loggedInUser.blockedUsers.includes(userId) || targetUser.blockedUsers.includes(loggedUserId)) {
+    if (
+      (loggedInUser.blockedUsers || []).includes(userId) ||
+      (targetUser.blockedUsers || []).includes(loggedUserId)
+    ) {
       return res.status(403).json({ error: 'Access denied. This user is blocked.' });
+    }
+
+    // 1. Track Profile View
+    await ProfileView.findOneAndUpdate(
+      { viewerId: loggedUserId, viewedUserId: userId },
+      { $inc: { count: 1 }, $set: { lastViewedAt: Date.now() } },
+      { upsert: true, new: true }
+    );
+
+    // 2. Track Interests
+    const interests = targetUser.bio.bioInterests || [];
+    for (const interest of interests) {
+      await InterestView.findOneAndUpdate(
+        { viewerId: loggedUserId, interest },
+        { $inc: { count: 1 } },
+        { upsert: true, new: true }
+      );
     }
 
     // Pagination parameters
@@ -134,11 +154,22 @@ exports.getUserDetails = async (req, res) => {
     const pageSize = parseInt(req.query.pageSize) || 10;
     const skip = (page - 1) * pageSize;
 
-    const userContentQuery = Content.find({ userId }).select('heading captions contentURL hashtags relatedTopics postdate likes comments contentType smeVerify viewCount')
+    const user = await User.findById(userId).select(
+      'profilePicture username firstname lastname email phoneNumber bio.bioInterests education workExperience courses certifications badges dateOfBirth location bio.bioAbout followers following followersCount followingCount role blockedUsers'
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const userContentQuery = Content.find({ userId })
+      .select(
+        'heading captions contentURL hashtags relatedTopics postdate likes comments contentType smeVerify viewCount'
+      )
       .populate('likes', 'username')
       .populate({
         path: 'comments',
-        select: 'commentText username commentDate'
+        select: 'commentText username commentDate',
       })
       .skip(skip)
       .limit(pageSize)
@@ -193,15 +224,15 @@ exports.getUserDetails = async (req, res) => {
         comments: content.comments.map(comment => ({
           commentText: comment.commentText,
           username: comment.username,
-          commentDate: comment.commentDate
+          commentDate: comment.commentDate,
         })),
       })),
-      pagination : {
+      pagination: {
         currentPage: page,
         pageSize,
         totalPages,
-        totalItems: totalPosts
-      }
+        totalItems: totalPosts,
+      },
     };
 
     res.status(200).json(formattedUser);

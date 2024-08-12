@@ -9,6 +9,8 @@ const certificationsController = require('../controllers/certificationsControlle
 const userProfileController = require('../controllers/userProfileController');
 const settingsController = require('../controllers/settingsController');
 const userSearchController = require('../controllers/userSearchController');
+const analyticsController = require('../controllers/analyticsController');
+
 
 const multer = require('multer');
 
@@ -75,5 +77,9 @@ router.post('/inner-circle/handle-request', userSearchController.handleInnerCirc
 router.post('/inner-circle/remove', userSearchController.removeInnerCircle);
 router.get('/inner-circle', userSearchController.getInnerCircleUsers);
 router.get('/inner-circle/requests', userSearchController.getInnerCircleRequests);
+
+// Route for fetching the combined analytics
+router.get('/user-analytics', analyticsController.getUserAnalytics);
+
 
 module.exports = router;
