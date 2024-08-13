@@ -158,11 +158,38 @@ const updateCommentPrivileges = async (req, res) => {
     }
   };
 
+const updateContactVisibility = async (req, res) => {
+    try {
+      const { showContact } = req.body;
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, jwtSecret);
+      const userId = decoded.userId;
+  
+      const userSettings = await UserSettings.findOne({ userId });
+  
+      if (!userSettings) {
+        return res.status(404).json({ message: 'User settings not found' });
+      }
+  
+      userSettings.showContact = showContact !== undefined ? showContact : userSettings.showContact;
+     
+  
+      await userSettings.save();
+  
+      res.json({ message: 'Contact visibility updated successfully' });
+    } catch (error) {
+      Sentry.captureException(error);
+      console.error('Error updating contact visibility:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+
 
 
 module.exports = {
   changePassword,
     updateCommentPrivileges,
     submitFeedback,
-    getFeedbackStatus
+    getFeedbackStatus,
+    updateContactVisibility
 };

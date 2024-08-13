@@ -8,6 +8,7 @@ const { createNotification } = require('./contentController');
 const Sentry = require('@sentry/node');
 require('dotenv').config();
 const jwtSecret = process.env.JWT_SECRET;
+const UserSettings = require('../models/userSettingsModel');
 
 // Controller function to search for users based on various criteria
 exports.searchUsers = async (req, res) => {
@@ -118,7 +119,9 @@ exports.getUserDetails = async (req, res) => {
     const decoded = jwt.verify(token, jwtSecret);
     const loggedUserId = decoded.userId;
 
-    const targetUser = await User.findById(userId).select('bio.bioInterests');
+    const targetUser = await User.findById(userId).select(
+      'profilePicture username firstname lastname email phoneNumber bio.bioInterests education workExperience courses certifications badges dateOfBirth location bio.bioAbout followers following followersCount followingCount role blockedUsers'
+    );
     const loggedInUser = await User.findById(loggedUserId);
 
     if (!targetUser || !loggedInUser) {
@@ -154,15 +157,17 @@ exports.getUserDetails = async (req, res) => {
     const pageSize = parseInt(req.query.pageSize) || 10;
     const skip = (page - 1) * pageSize;
 
-    const user = await User.findById(userId).select(
-      'profilePicture username firstname lastname email phoneNumber bio.bioInterests education workExperience courses certifications badges dateOfBirth location bio.bioAbout followers following followersCount followingCount role blockedUsers'
-    );
+    // Fetch target user settings
+    const userSettings = await UserSettings.findOne({ userId: targetUser._id });
 
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
+    // Handle visibility of email and phone number
+    const email1 = userSettings && userSettings.showContact ? targetUser.email : null;
+    const phoneNumber1 = userSettings && userSettings.showContact ? targetUser.phoneNumber : null;
 
-    const userContentQuery = Content.find({ userId })
+    const totalPosts = await Content.countDocuments({ userId: targetUser._id });
+    const totalPages = Math.ceil(totalPosts / pageSize);
+
+    const userContent = await Content.find({ userId: userId })
       .select(
         'heading captions contentURL hashtags relatedTopics postdate likes comments contentType smeVerify viewCount'
       )
@@ -175,37 +180,30 @@ exports.getUserDetails = async (req, res) => {
       .limit(pageSize)
       .sort({ postdate: -1 });
 
-    const totalPosts = await Content.countDocuments({ userId: user._id });
-    const totalPages = Math.ceil(totalPosts / pageSize);
-    const userContent = await userContentQuery;
-
-    const followingUserIds = loggedInUser.following || [];
-    const isFollowing = followingUserIds.includes(user.username);
-
     const formattedUser = {
-      profilePicture: user.profilePicture,
-      userId: user._id,
-      username: user.username,
-      firstname: user.firstname,
-      lastname: user.lastname,
-      email: user.email,
-      phoneNumber: user.phoneNumber,
-      role: user.role === 'Subject Matter Expert' ? 'SME' : '',
+      profilePicture: targetUser.profilePicture,
+      userId: targetUser._id,
+      username: targetUser.username,
+      firstname: targetUser.firstname,
+      lastname: targetUser.lastname,
+      email: email1,
+      phoneNumber: phoneNumber1,
+      role: targetUser.role === 'Subject Matter Expert' ? 'SME' : '',
       totalPosts,
-      bioInterests: user.bio.bioInterests,
-      education: user.education,
-      workExperience: user.workExperience,
-      courses: user.courses,
-      certifications: user.certifications,
-      badges: user.badges,
-      dateOfBirth: user.dateOfBirth,
-      location: user.location,
-      bioAbout: user.bio.bioAbout,
-      followersCount: user.followersCount,
-      followers: user.followers,
-      followingCount: user.followingCount,
-      following: user.following,
-      isFollowing,
+      bioInterests: targetUser.bio.bioInterests,
+      education: targetUser.education,
+      workExperience: targetUser.workExperience,
+      courses: targetUser.courses,
+      certifications: targetUser.certifications,
+      badges: targetUser.badges,
+      dateOfBirth: targetUser.dateOfBirth,
+      location: targetUser.location,
+      bioAbout: targetUser.bio.bioAbout,
+      followersCount: targetUser.followersCount,
+      followers: targetUser.followers,
+      followingCount: targetUser.followingCount,
+      following: targetUser.following,
+      isFollowing: loggedInUser.following.includes(targetUser.username),
       content: userContent.map(content => ({
         heading: content.heading,
         captions: content.captions,
@@ -242,6 +240,8 @@ exports.getUserDetails = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+
 
   // Function to follow a user
   exports.followUser = async (req, res) => {

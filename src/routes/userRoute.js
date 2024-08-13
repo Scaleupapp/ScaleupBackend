@@ -81,5 +81,8 @@ router.get('/inner-circle/requests', userSearchController.getInnerCircleRequests
 // Route for fetching the combined analytics
 router.get('/user-analytics', analyticsController.getUserAnalytics);
 
+//udpate contact visibility
+router.post('/update-contact-visibility', settingsController.updateContactVisibility);
+
 
 module.exports = router;

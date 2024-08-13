@@ -1,3 +1,5 @@
+// UserSettings Model
+
 const mongoose = require('mongoose');
 
 const userSettingsSchema = new mongoose.Schema({
@@ -11,7 +13,10 @@ const userSettingsSchema = new mongoose.Schema({
     enum: ['everyone', 'followers', 'none'],
     default: 'everyone',
   },
-  // Add other user settings fields as needed
+  showContact: {
+    type: Boolean,
+    default: true, // By default, the email is visible
+  },
 });
 
 const UserSettings = mongoose.model('UserSettings', userSettingsSchema);
