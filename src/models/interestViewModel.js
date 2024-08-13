@@ -3,12 +3,11 @@ const mongoose = require('mongoose');
 
 const interestViewSchema = new mongoose.Schema({
   viewerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  interest: { type: String, required: true },
-  count: { type: Number, default: 1 } // Counts how many times this interest has been viewed
+  interest: { type: String, required: true, lowercase: true },
+  count: { type: Number, default: 1 }
 });
 
-interestViewSchema.index({ viewerId: 1, interest: 1 }, { unique: true }); // Prevent duplicates
+interestViewSchema.index({ viewerId: 1, interest: 1 }, { unique: true });
 
 const InterestView = mongoose.model('InterestView', interestViewSchema);
-
 module.exports = InterestView;
