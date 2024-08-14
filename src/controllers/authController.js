@@ -10,6 +10,7 @@ const twilio = require("twilio"); // Import Twilio
 const router = express.Router();
 const nodemailer = require("nodemailer");
 const Sentry = require("@sentry/node");
+//const Streak = require('../models/streakModel');
 
 require("dotenv").config();
 
@@ -21,9 +22,8 @@ const gmailpassword = process.env.GMAIL_PASSWORD;
 
 const twilioClient = twilio(twilioAccountSid, twilioAuthToken);
 
-// Login route
 const login = async (req, res) => {
-  const { loginIdentifier, password ,devicetoken} = req.body;
+  const { loginIdentifier, password, devicetoken } = req.body;
 
   try {
     // Find the user by email, username, or phone number (case-insensitive)
@@ -45,31 +45,90 @@ const login = async (req, res) => {
 
     if (isPasswordValid) {
       // Password is correct
-      // Create a JWT token for session management (customize as needed)
+      // Create a JWT token for session management
       const token = jwt.sign({ userId: user._id }, jwtSecret, {
         expiresIn: '7200h',
       });
 
-      user.devicetoken=devicetoken;
+      // Update the user's device token
+      user.devicetoken = devicetoken;
+
+      // Handle first-time login logic
+      const isFirstTimeLogin1 = user.isFirstTimeLogin;
+      const isTestUser = user.isTestUser;
+
+      if (user.isFirstTimeLogin) {
+        user.isFirstTimeLogin = false;
+      }
+
+      // Handle streak logic
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Set time to start of the day
+
+      let streakLabel = 'No streak';
+
+      if (user.lastLoginDate) {
+        const lastLoginDate = new Date(user.lastLoginDate);
+        lastLoginDate.setHours(0, 0, 0, 0);
+
+        const dayDifference = (today - lastLoginDate) / (1000 * 60 * 60 * 24);
+
+        if (dayDifference === 1) {
+          // User logged in on consecutive days
+          user.streakCount += 1;
+        } else if (dayDifference > 1) {
+          // User missed a day or more, reset the streak
+          user.streakCount = 1;
+        }
+      } else {
+        // First login ever, start the streak
+        user.streakCount = 1;
+      }
+
+      // Determine streak label
+      if (user.streakCount >= 365) {
+        streakLabel = '1 year streak';
+      } else if (user.streakCount >= 180) {
+        streakLabel = '6 months streak';
+      } else if (user.streakCount >= 90) {
+        streakLabel = '1 quarter streak';
+      } else if (user.streakCount >= 30) {
+        streakLabel = '1 month streak';
+      } else if (user.streakCount >= 21) {
+        streakLabel = '3 weeks streak';
+      } else if (user.streakCount >= 14) {
+        streakLabel = '2 weeks streak';
+      } else if (user.streakCount >= 7) {
+        streakLabel = '1 week streak'; 
+      }else if (user.streakCount = 1) {
+        streakLabel = '1 day streak'; 
+      }
+
+      // Update last login date and streak label
+      user.lastLoginDate = today;
+      user.streakLabel = streakLabel;
+
+      // Save user data
       await user.save();
 
-      const isFirstTimeLogin1 = user.isFirstTimeLogin;
-      const isTestUser =user.isTestUser;
-      if(user.isFirstTimeLogin)
-      {
-        user.isFirstTimeLogin=false;
-        await user.save();
-      }
-      
-      // Return a success message and the token
-      res.json({
+      // Prepare the response data
+      const responseData = {
         message: "Login successful",
         token,
-        isFirstTimeLogin1,
+        isFirstTimeLogin: isFirstTimeLogin1,
         id: user._id,
         isTestUser,
+        badges: user.badges, // Returning the array of badges
+        role: user.role,
+        username: user.username,
+        email: user.email,
+        profilePicture: user.profilePicture,
+        streakCount: user.streakCount, // Include streak count in response
+        streakLabel: user.streakLabel, // Include streak label in response
+      };
 
-      });
+      // Return the success message with the user details and token
+      res.json(responseData);
     } else {
       // Password is incorrect
       res.status(401).json({ message: "Incorrect Password" });
@@ -89,10 +148,6 @@ const login = async (req, res) => {
   }
 };
 
-
-module.exports = {
-  login, // Export the login function as an object property
-};
 
 const register = async (req, res) => {
   // Extract user registration data from the request body

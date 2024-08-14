@@ -1,3 +1,4 @@
+// User Model (userModel.js)
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
@@ -12,12 +13,16 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   profilePicture: String,
   role: { type: String, enum: ['User', 'Subject Matter Expert'], default: 'User' },
-  badges: { type: String, enum: ['Novice', 'Explorer', 'Creator', 'Specialist', 'Influencer'], default: 'Novice' },
+  badges: [{
+    type: String,
+    enum: ['Novice', 'Explorer', 'Creator', 'Specialist', 'Influencer'],
+    default: 'Novice'
+}],
   firstname: { type: String, required: true },
   lastname: { type: String, required: true },
   phoneNumber: String,
   dateOfBirth: Date,
-  location: String, 
+  location: String,
   bio: { bioAbout: String, bioInterests: [String] },
   education: [{ degree: String, fieldOfStudy: String, school: String, graduationYear: String }],
   workExperience: [{ position: String, company: String, startDate: Date, endDate: Date, description: String }],
@@ -41,6 +46,9 @@ const userSchema = new mongoose.Schema({
   savedContent: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Content' }],
   innerCircle: [{ type: Schema.Types.ObjectId, ref: 'User' }],
   innerCircleRequests: [innerCircleRequestSchema],
+  lastLoginDate: { type: Date }, // New field to track the last login date
+  streakCount: { type: Number, default: 0 }, // New field to track the login streak
+  streakLabel: { type: String, default: 'No streak' },
 }, { collection: 'Users' });
 
 const User = mongoose.model('User', userSchema);

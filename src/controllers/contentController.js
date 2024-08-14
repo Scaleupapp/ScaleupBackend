@@ -205,20 +205,15 @@ exports.updateContentRatingAndVerification = async (req, res) => {
         const contentAuthor = await User.findById(content.userId);
 
         if (contentAuthor) {
+          // Accumulate totalRating directly as a simple sum
           contentAuthor.totalRating += rating;
-          await contentAuthor.save();
 
-          if (contentAuthor.totalRating >= 1000) {
-            contentAuthor.badges = 'Subject Matter Expert';
-          } else if (contentAuthor.totalRating >= 600) {
-            contentAuthor.badges = 'Influencer';
-          } else if (contentAuthor.totalRating >= 300) {
-            contentAuthor.badges = 'Specialist';
-          } else if (contentAuthor.totalRating >= 150) {
-            contentAuthor.badges = 'Creator';
-          } else if (contentAuthor.totalRating >= 10) {
-            contentAuthor.badges = 'Explorer';
-          }
+          // Calculate the new level based on the accumulated totalRating
+          contentAuthor.level = calculateLevel(contentAuthor.totalRating);
+
+          // Update badges based on the current totalRating
+          contentAuthor.badges = getUpdatedBadges(contentAuthor.totalRating, contentAuthor.badges);
+
           await contentAuthor.save();
         }
       }
@@ -241,6 +236,35 @@ exports.updateContentRatingAndVerification = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+// Helper function to calculate user level based on totalRating
+function calculateLevel(totalRating) {
+  if (totalRating >= 1000) return 5;
+  if (totalRating >= 600) return 4;
+  if (totalRating >= 300) return 3;
+  if (totalRating >= 150) return 2;
+  return 1;
+}
+
+// Helper function to assign or update badges based on totalRating
+function getUpdatedBadges(totalRating, currentBadges) {
+  const badges = new Set(currentBadges);
+
+  if (totalRating >= 1000) {
+    badges.add('Subject Matter Expert');
+  } else if (totalRating >= 600) {
+    badges.add('Influencer');
+  } else if (totalRating >= 300) {
+    badges.add('Specialist');
+  } else if (totalRating >= 150) {
+    badges.add('Creator');
+  } else if (totalRating >= 10) {
+    badges.add('Explorer');
+  }
+
+  return Array.from(badges);
+}
+
 
 
 // Controller function to get content details by content ID for verfification
