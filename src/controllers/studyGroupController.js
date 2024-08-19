@@ -4,8 +4,12 @@ const aws = require('aws-sdk');
 const Sentry = require('@sentry/node');
 const { createNotification } = require('./contentController');
 const User = require('../models/userModel');
-
 require('dotenv').config();
+
+let io;
+ const setSocketIo = (socketIoInstance) => {
+  io = socketIoInstance;
+};
 
 const jwtSecret = process.env.JWT_SECRET;
 const s3 = new aws.S3({
@@ -13,6 +17,7 @@ const s3 = new aws.S3({
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   region: process.env.AWS_REGION,
 });
+
 
 // Create a new study group with profile picture upload
 const createStudyGroup = async (req, res) => {
@@ -447,6 +452,82 @@ const handleJoinRequest = async (req, res) => {
     }
 };
 
+// Sending a message to the study group with S3 integration for attachments
+const sendGroupMessage = async (req, res) => {
+  try {
+    const { groupId, message } = req.body;
+    const files = req.files; // Assume that the attachments are sent as files
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret);
+    const senderId = decoded.userId;
+
+    const group = await StudyGroup.findById(groupId);
+
+    if (!group) {
+      return res.status(404).json({ message: 'Study group not found' });
+    }
+
+    if (!group.members.includes(senderId)) {
+      return res.status(403).json({ message: 'You are not a member of this group.' });
+    }
+
+    // Array to store attachment URLs
+    let attachments = [];
+
+    // Upload each file to S3
+    if (files && files.length > 0) {
+      for (const file of files) {
+        const params = {
+          Bucket: 'scaleupbucket',
+          Key: `study-groups/${groupId}/messages/${Date.now()}_${file.originalname}`,
+          Body: file.buffer,
+          ACL: 'public-read', // Optional: define the access level
+          ContentType: file.mimetype,
+        };
+
+        const uploadResult = await s3.upload(params).promise();
+        attachments.push(uploadResult.Location); // Save the S3 URL to the attachments array
+      }
+    }
+
+    const newMessage = {
+      sender: senderId,
+      content: message,
+      attachments,
+    };
+
+    group.messages.push(newMessage);
+    await group.save();
+
+    // Emit the message to all connected clients in the group
+    io.to(groupId).emit("receiveMessage", newMessage);
+
+    res.status(200).json({ message: 'Message sent successfully', newMessage });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error sending message:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// Retrieving messages from the study group
+const getGroupMessages = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+
+    const group = await StudyGroup.findById(groupId).populate('messages.sender', 'username profilePicture');
+
+    if (!group) {
+      return res.status(404).json({ message: 'Study group not found' });
+    }
+
+    res.status(200).json(group.messages);
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error fetching group messages:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
   
   
 
@@ -460,5 +541,8 @@ const handleJoinRequest = async (req, res) => {
     requestToJoinStudyGroup,
     searchStudyGroups,
     handleJoinRequest,
-    getStudyGroupDetailsById
+    getStudyGroupDetailsById,
+    sendGroupMessage,
+    getGroupMessages,
+    setSocketIo,
   };

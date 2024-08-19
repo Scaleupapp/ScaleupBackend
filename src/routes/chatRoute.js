@@ -28,5 +28,8 @@ router.delete('/group/:id', studyGroupController.deleteStudyGroup);
 router.get('/', studyGroupController.getAllStudyGroups);
 router.post('/join-request', studyGroupController.requestToJoinStudyGroup); // Request to join a study group
 router.post('/handle-join-request', studyGroupController.handleJoinRequest); // Handle join request (approve/reject)
+// Route to sending/receivng  a message with attachments in a study group
+router.post('/group/send', upload.array('attachments'), studyGroupController.sendGroupMessage);
+router.get('/group/:groupId/messages', studyGroupController.getGroupMessages);
 
 module.exports = router;
