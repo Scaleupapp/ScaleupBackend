@@ -6,12 +6,18 @@ const joinRequestSchema = new mongoose.Schema({
     requestedDate: { type: Date, default: Date.now }
 });
 
+const reactionSchema = new mongoose.Schema({
+    emoji: { type: String, required: true },
+    users: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+});
+
 const messageSchema = new mongoose.Schema({
     sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     content: { type: String, required: true },
     attachments: [{ type: String }], // Optional: for any attachments like images, files, etc.
+    reactions: [reactionSchema], // Reactions field added
     timestamp: { type: Date, default: Date.now }
-  });
+});
 
 const studyGroupSchema = new mongoose.Schema({
     name: { type: String, required: true },

@@ -14,6 +14,9 @@ router.get('/groupsearch', studyGroupController.searchStudyGroups); // Static ro
 // Chat routes
 router.post('/send', chatController.sendMessage);
 router.get('/:conversationId', chatController.getMessages);
+// Add reaction to a message
+router.post('/:conversationId/:messageId/reactions', chatController.addReaction);
+
 
 // Share routes
 router.post('/share', shareController.shareContent);
@@ -31,5 +34,6 @@ router.post('/handle-join-request', studyGroupController.handleJoinRequest); // 
 // Route to sending/receivng  a message with attachments in a study group
 router.post('/group/send', upload.array('attachments'), studyGroupController.sendGroupMessage);
 router.get('/group/:groupId/messages', studyGroupController.getGroupMessages);
+router.post('/group/:groupId/messages/:messageId/reactions', studyGroupController.addReaction);
 
 module.exports = router;

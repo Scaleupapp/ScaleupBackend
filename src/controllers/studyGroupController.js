@@ -529,6 +529,53 @@ const getGroupMessages = async (req, res) => {
   }
 };
   
+const addReaction = async (req, res) => {
+  try {
+      const { groupId, messageId } = req.params;
+      const { emoji } = req.body;
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, jwtSecret);
+      const userId = decoded.userId;
+
+      const group = await StudyGroup.findById(groupId);
+      if (!group) {
+          return res.status(404).json({ message: 'Study group not found' });
+      }
+
+      const message = group.messages.id(messageId);
+      if (!message) {
+          return res.status(404).json({ message: 'Message not found' });
+      }
+
+      // Find if the reaction already exists
+      let reaction = message.reactions.find(r => r.emoji === emoji);
+
+      if (reaction) {
+          // Add user to the reaction if not already present
+          if (!reaction.users.includes(userId)) {
+              reaction.users.push(userId);
+          }
+      } else {
+          // Create a new reaction if it doesn't exist
+          message.reactions.push({
+              emoji,
+              users: [userId]
+          });
+      }
+
+      await group.save();
+
+      // Emit the reaction to all connected clients in the group
+      io.to(groupId).emit("reactionAdded", { messageId, emoji, userId });
+
+      res.status(200).json({ message: 'Reaction added successfully', reactions: message.reactions });
+  } catch (error) {
+      Sentry.captureException(error);
+      console.error('Error adding reaction:', error);
+      res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
   
 
   module.exports = {
@@ -545,4 +592,5 @@ const getGroupMessages = async (req, res) => {
     sendGroupMessage,
     getGroupMessages,
     setSocketIo,
+    addReaction
   };

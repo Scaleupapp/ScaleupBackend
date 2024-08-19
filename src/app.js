@@ -140,6 +140,45 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Handle adding a reaction to a message
+  socket.on("addReaction", async (data) => {
+    const { conversationId, groupId, messageId, emoji, token } = data;
+    const decoded = jwt.verify(token, jwtSecret);
+    const userId = decoded.userId;
+
+    if (conversationId) {
+      const result = await chatController.addReaction({
+        conversationId,
+        messageId,
+        emoji,
+        userId,
+      });
+
+      if (result.success) {
+        io.to(conversationId).emit("reactionAdded", {
+          messageId,
+          emoji,
+          userId,
+        });
+      }
+    } else if (groupId) {
+      const result = await studyGroupController.addReaction({
+        groupId,
+        messageId,
+        emoji,
+        userId,
+      });
+
+      if (result.success) {
+        io.to(groupId).emit("reactionAdded", {
+          messageId,
+          emoji,
+          userId,
+        });
+      }
+    }
+  });
+
   socket.on("disconnect", () => {
     console.log("Client disconnected");
   });

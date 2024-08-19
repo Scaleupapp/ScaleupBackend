@@ -59,3 +59,51 @@ exports.getMessages = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
+
+exports.addReaction = async (req, res) => {
+  try {
+    const { conversationId, messageId } = req.params;
+    const { emoji } = req.body;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    const message = await Message.findOne({ _id: messageId, conversationId });
+    if (!message) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    // Initialize the reactions array if it doesn't exist
+    if (!message.reactions) {
+      message.reactions = [];
+    }
+
+    // Find if the reaction already exists
+    let reaction = message.reactions.find(r => r.emoji === emoji);
+
+    if (reaction) {
+      // Add user to the reaction if not already present
+      if (!reaction.users.includes(userId)) {
+        reaction.users.push(userId);
+      }
+    } else {
+      // Create a new reaction if it doesn't exist
+      message.reactions.push({
+        emoji,
+        users: [userId]
+      });
+    }
+
+    await message.save();
+
+    // Emit the reaction to all connected clients in the conversation
+    io.to(conversationId).emit("reactionAdded", { messageId, emoji, userId });
+
+    res.status(200).json({ message: "Reaction added successfully", reactions: message.reactions });
+  } catch (error) {
+    console.error("Error adding reaction:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
