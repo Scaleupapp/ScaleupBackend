@@ -14,9 +14,12 @@ const reactionSchema = new mongoose.Schema({
 const messageSchema = new mongoose.Schema({
     sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     content: { type: String, required: true },
-    attachments: [{ type: String }], // Optional: for any attachments like images, files, etc.
-    reactions: [reactionSchema], // Reactions field added
-    timestamp: { type: Date, default: Date.now }
+    attachments: [{ type: String }], 
+    reactions: [reactionSchema], 
+    timestamp: { type: Date, default: Date.now },
+    edited: { type: Boolean, default: false }, // New field to track if the message was edited
+    deleted: { type: Boolean, default: false }, // New field to track if the message was deleted
+
 });
 
 const studyGroupSchema = new mongoose.Schema({

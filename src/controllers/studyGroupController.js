@@ -521,13 +521,17 @@ const getGroupMessages = async (req, res) => {
       return res.status(404).json({ message: 'Study group not found' });
     }
 
-    res.status(200).json(group.messages);
+    // Filter out deleted messages
+    const visibleMessages = group.messages.filter(message => !message.deleted);
+
+    res.status(200).json(visibleMessages);
   } catch (error) {
     Sentry.captureException(error);
     console.error('Error fetching group messages:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+
   
 const addReaction = async (req, res) => {
   try {
@@ -545,6 +549,11 @@ const addReaction = async (req, res) => {
       const message = group.messages.id(messageId);
       if (!message) {
           return res.status(404).json({ message: 'Message not found' });
+      }
+
+      // Check if the message is deleted
+      if (message.deleted) {
+          return res.status(403).json({ message: 'Cannot react to a deleted message' });
       }
 
       // Find if the reaction already exists
@@ -576,6 +585,95 @@ const addReaction = async (req, res) => {
   }
 };
 
+
+const editGroupMessage = async (req, res) => {
+  try {
+    const { groupId, messageId } = req.params;
+    const { content } = req.body;
+    const token = req.headers.authorization.split(" ")[1];
+    const decoded = jwt.verify(token, jwtSecret);
+    const userId = decoded.userId;
+
+    const group = await StudyGroup.findById(groupId);
+    if (!group) {
+      return res.status(404).json({ message: "Study group not found" });
+    }
+
+    const message = group.messages.id(messageId);
+    if (!message) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    // Check if the message is deleted
+    if (message.deleted) {
+      return res.status(403).json({ message: "Cannot edit a deleted message" });
+    }
+
+    if (message.sender.toString() !== userId) {
+      return res.status(403).json({ message: "Unauthorized to edit this message" });
+    }
+
+    const now = new Date();
+    if ((now - message.timestamp) > 10 * 60 * 1000) { // 10 minutes
+      return res.status(403).json({ message: "Cannot edit message after 10 minutes" });
+    }
+
+    message.content = content;
+    message.edited = true;
+
+    await group.save();
+
+    io.to(groupId).emit("messageEdited", { messageId, content });
+
+    res.status(200).json({ message: "Message edited successfully", message });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error("Error editing message:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+
+const deleteGroupMessage = async (req, res) => {
+  try {
+    const { groupId, messageId } = req.params;
+    const token = req.headers.authorization.split(" ")[1];
+    const decoded = jwt.verify(token, jwtSecret);
+    const userId = decoded.userId;
+
+    const group = await StudyGroup.findById(groupId);
+    if (!group) {
+      return res.status(404).json({ message: "Study group not found" });
+    }
+
+    const message = group.messages.id(messageId);
+    if (!message) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    if (message.sender.toString() !== userId) {
+      return res.status(403).json({ message: "Unauthorized to delete this message" });
+    }
+
+    const now = new Date();
+    if ((now - message.timestamp) > 10 * 60 * 1000) { // 10 minutes
+      return res.status(403).json({ message: "Cannot delete message after 10 minutes" });
+    }
+
+    message.content = "This message was deleted";
+    message.deleted = true;
+
+    await group.save();
+
+    io.to(groupId).emit("messageDeleted", { messageId });
+
+    res.status(200).json({ message: "Message deleted successfully" });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error("Error deleting message:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
   
 
   module.exports = {
@@ -592,5 +690,7 @@ const addReaction = async (req, res) => {
     sendGroupMessage,
     getGroupMessages,
     setSocketIo,
-    addReaction
+    addReaction,
+    editGroupMessage,
+    deleteGroupMessage
   };

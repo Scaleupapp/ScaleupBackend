@@ -179,6 +179,76 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Handle editing a message (for both one-to-one and group chats)
+  socket.on("editMessage", async (data) => {
+    const { conversationId, groupId, messageId, newContent, token } = data;
+    const decoded = jwt.verify(token, jwtSecret);
+    const userId = decoded.userId;
+
+    if (conversationId) {
+      const result = await chatController.editMessage({
+        conversationId,
+        messageId,
+        newContent,
+        userId,
+      });
+
+      if (result.success) {
+        io.to(conversationId).emit("messageEdited", {
+          messageId,
+          newContent,
+        });
+      }
+    } else if (groupId) {
+      const result = await studyGroupController.editGroupMessage({
+        groupId,
+        messageId,
+        newContent,
+        userId,
+      });
+
+      if (result.success) {
+        io.to(groupId).emit("messageEdited", {
+          messageId,
+          newContent,
+        });
+      }
+    }
+  });
+
+  // Handle deleting a message (for both one-to-one and group chats)
+  socket.on("deleteMessage", async (data) => {
+    const { conversationId, groupId, messageId, token } = data;
+    const decoded = jwt.verify(token, jwtSecret);
+    const userId = decoded.userId;
+
+    if (conversationId) {
+      const result = await chatController.deleteMessage({
+        conversationId,
+        messageId,
+        userId,
+      });
+
+      if (result.success) {
+        io.to(conversationId).emit("messageDeleted", {
+          messageId,
+        });
+      }
+    } else if (groupId) {
+      const result = await studyGroupController.deleteGroupMessage({
+        groupId,
+        messageId,
+        userId,
+      });
+
+      if (result.success) {
+        io.to(groupId).emit("messageDeleted", {
+          messageId,
+        });
+      }
+    }
+  });
+
   socket.on("disconnect", () => {
     console.log("Client disconnected");
   });

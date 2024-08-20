@@ -46,12 +46,11 @@ exports.sendMessage = async (req, res) => {
   }
 };
 
-
 exports.getMessages = async (req, res) => {
   try {
     const { conversationId } = req.params;
 
-    const messages = await Message.find({ conversationId }).populate("sender", "username profilePicture");
+    const messages = await Message.find({ conversationId, deleted: false }).populate("sender", "username profilePicture");
 
     res.status(200).json(messages);
   } catch (error) {
@@ -59,7 +58,6 @@ exports.getMessages = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
-
 
 exports.addReaction = async (req, res) => {
   try {
@@ -72,6 +70,11 @@ exports.addReaction = async (req, res) => {
     const message = await Message.findOne({ _id: messageId, conversationId });
     if (!message) {
       return res.status(404).json({ message: "Message not found" });
+    }
+
+    // Check if the message is deleted
+    if (message.deleted) {
+      return res.status(403).json({ message: "Cannot react to a deleted message" });
     }
 
     // Initialize the reactions array if it doesn't exist
@@ -103,6 +106,84 @@ exports.addReaction = async (req, res) => {
     res.status(200).json({ message: "Reaction added successfully", reactions: message.reactions });
   } catch (error) {
     console.error("Error adding reaction:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+exports.editMessage = async (req, res) => {
+  try {
+    const { conversationId, messageId } = req.params;
+    const { content } = req.body;
+    const token = req.headers.authorization.split(" ")[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    const message = await Message.findOne({ _id: messageId, conversationId });
+
+    if (!message) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    // Check if the message is deleted
+    if (message.deleted) {
+      return res.status(403).json({ message: "Cannot edit a deleted message" });
+    }
+
+    if (message.sender.toString() !== userId) {
+      return res.status(403).json({ message: "Unauthorized to edit this message" });
+    }
+
+    const now = new Date();
+    if ((now - message.createdAt) > 10 * 60 * 1000) { // 10 minutes
+      return res.status(403).json({ message: "Cannot edit message after 10 minutes" });
+    }
+
+    message.message = content;
+    message.edited = true;
+
+    await message.save();
+
+    io.to(conversationId).emit("messageEdited", { messageId, content });
+
+    res.status(200).json({ message: "Message edited successfully", message });
+  } catch (error) {
+    console.error("Error editing message:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+exports.deleteMessage = async (req, res) => {
+  try {
+    const { conversationId, messageId } = req.params;
+    const token = req.headers.authorization.split(" ")[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    const message = await Message.findOne({ _id: messageId, conversationId });
+
+    if (!message) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    if (message.sender.toString() !== userId) {
+      return res.status(403).json({ message: "Unauthorized to delete this message" });
+    }
+
+    const now = new Date();
+    if ((now - message.createdAt) > 10 * 60 * 1000) { // 10 minutes
+      return res.status(403).json({ message: "Cannot delete message after 10 minutes" });
+    }
+
+    message.message = "This message was deleted";
+    message.deleted = true;
+
+    await message.save();
+
+    io.to(conversationId).emit("messageDeleted", { messageId });
+
+    res.status(200).json({ message: "Message deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting message:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };

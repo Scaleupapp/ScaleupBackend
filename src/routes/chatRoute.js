@@ -16,6 +16,11 @@ router.post('/send', chatController.sendMessage);
 router.get('/:conversationId', chatController.getMessages);
 // Add reaction to a message
 router.post('/:conversationId/:messageId/reactions', chatController.addReaction);
+// Edit a one-to-one chat message
+router.put('/:conversationId/messages/:messageId/edit', chatController.editMessage);
+// Delete a one-to-one chat message
+router.delete('/:conversationId/messages/:messageId/delete', chatController.deleteMessage);
+
 
 
 // Share routes
@@ -35,5 +40,11 @@ router.post('/handle-join-request', studyGroupController.handleJoinRequest); // 
 router.post('/group/send', upload.array('attachments'), studyGroupController.sendGroupMessage);
 router.get('/group/:groupId/messages', studyGroupController.getGroupMessages);
 router.post('/group/:groupId/messages/:messageId/reactions', studyGroupController.addReaction);
+
+// Edit a group chat message
+router.put('/:groupId/group/:messageId/edit', studyGroupController.editGroupMessage);
+// Delete a group chat message
+router.delete('/:groupId/group/:messageId/delete', studyGroupController.deleteGroupMessage);
+
 
 module.exports = router;
