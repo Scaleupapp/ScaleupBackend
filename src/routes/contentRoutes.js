@@ -83,6 +83,22 @@ router.post('/comments/reply', contentController.addReply);
 router.post('/comments/like/:commentId', contentController.likeComment);
 router.post('/comments/unlike/:commentId', contentController.unlikeComment);
 
+// Route to create a new Learn List
+router.post('/createlist', contentController.createLearnList);
+// Route to get a Learn List by ID
+router.get('/getlearnList/:learnListId', contentController.getLearnListById);
+// Route to add content to a Learn List
+router.put('/:learnListId/add-content', contentController.addContentToLearnList);
+// Route to delete a Learn List by ID
+router.delete('/learnList/:learnListId', contentController.deleteLearnList);
+// Route to get all public Learn Lists
+router.get('/learnList/public', contentController.getAllPublicLearnLists);
+// Route to change the sequence of content in a Learn List
+router.put('/:learnListId/change-sequence', contentController.changeContentSequence);
+// Route to list all Learn Lists created by the logged-in user
+router.get('/learnList/mylists', contentController.getLearnListsByUser);
+// Route to search Learn Lists based on username, description, and related topics
+router.post('/learnList/search', contentController.searchLearnLists);
 
 
 module.exports = router;

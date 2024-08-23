@@ -10,6 +10,7 @@
   require('dotenv').config();
   const ProfileView = require('../models/profileViewModel');
   const InterestView = require('../models/interestViewModel');
+  const LearnList = require('../models/learnListModel');
 
 
   const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
@@ -1166,7 +1167,281 @@
     }
   };
 
+  // Create a new Learn List
+exports.createLearnList = async (req, res) => {
+  try {
+    const { name, description, contentItems, visibility, relatedTopics } = req.body; // Add relatedTopics to the destructuring
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const creatorId = decoded.userId;
 
+    // Validate the contentItems and assign sequence numbers
+    const validContentItems = await Promise.all(
+      contentItems.map(async (item, index) => {
+        const content = await Content.findById(item.content);
+        if (!content) {
+          throw new Error(`Content with ID ${item.content} not found`);
+        }
+        return { content: item.content, sequence: index + 1 };
+      })
+    );
+
+    // Create the LearnList object including the relatedTopics field
+    const learnList = new LearnList({
+      name,
+      description,
+      creator: creatorId,
+      contentItems: validContentItems,
+      visibility,
+      relatedTopics, // Include relatedTopics here
+    });
+
+    await learnList.save();
+    res.status(201).json({ message: 'Learn List created successfully', learnList });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error creating Learn List:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+
+  // Get a Learn List by ID
+  exports.getLearnListById = async (req, res) => {
+    try {
+      const { learnListId } = req.params;
+      const learnList = await LearnList.findById(learnListId).populate('contentItems.content');
+
+      if (!learnList) {
+        return res.status(404).json({ message: 'Learn List not found' });
+      }
+
+      res.status(200).json(learnList);
+    } catch (error) {
+      Sentry.captureException(error);
+      console.error('Error fetching Learn List:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+
+// Add Content to an existing Learn List and manage sequences
+exports.addContentToLearnList = async (req, res) => {
+  try {
+    const { learnListId } = req.params;
+    const { contentId, sequence } = req.body;
+
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    const learnList = await LearnList.findById(learnListId);
+
+    if (!learnList) {
+      return res.status(404).json({ message: 'Learn List not found' });
+    }
+
+    // Check if the user is the creator of the Learn List
+    if (learnList.creator.toString() !== userId) {
+      return res.status(403).json({ message: 'You do not have permission to modify this Learn List' });
+    }
+
+    if (!contentId) {
+      return res.status(400).json({ message: 'Content ID is required' });
+    }
+
+    if (sequence === undefined || sequence === null) {
+      // Add content to the end of the Learn List
+      learnList.contentItems.push({ content: contentId, sequence: learnList.contentItems.length + 1 });
+    } else {
+      // Add content at the specified sequence, and adjust other items
+      const indexToInsert = sequence - 1;
+
+      // Validate sequence
+      if (indexToInsert < 0 || indexToInsert > learnList.contentItems.length) {
+        return res.status(400).json({ message: 'Invalid sequence number' });
+      }
+
+      // Insert the new content and push other items down
+      learnList.contentItems.splice(indexToInsert, 0, { content: contentId, sequence: sequence });
+
+      // Adjust sequence numbers of all items
+      for (let i = 0; i < learnList.contentItems.length; i++) {
+        learnList.contentItems[i].sequence = i + 1;
+      }
+    }
+
+    await learnList.save();
+    res.status(200).json({ message: 'Content added and sequences updated successfully', learnList });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error adding content to Learn List:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Change the sequence of existing content in a Learn List
+exports.changeContentSequence = async (req, res) => {
+  try {
+    const { learnListId } = req.params;
+    const { contentId, newSequence } = req.body;
+
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    const learnList = await LearnList.findById(learnListId);
+
+    if (!learnList) {
+      return res.status(404).json({ message: 'Learn List not found' });
+    }
+
+    // Check if the user is the creator of the Learn List
+    if (learnList.creator.toString() !== userId) {
+      return res.status(403).json({ message: 'You do not have permission to modify this Learn List' });
+    }
+
+    const contentIndex = learnList.contentItems.findIndex(item => item.content.toString() === contentId);
+
+    if (contentIndex === -1) {
+      return res.status(404).json({ message: 'Content not found in the Learn List' });
+    }
+
+    if (newSequence < 1 || newSequence > learnList.contentItems.length) {
+      return res.status(400).json({ message: 'Invalid sequence number' });
+    }
+
+    // Remove the content item from its current position
+    const [contentItem] = learnList.contentItems.splice(contentIndex, 1);
+
+    // Insert the content item at the new sequence position
+    learnList.contentItems.splice(newSequence - 1, 0, contentItem);
+
+    // Adjust sequence numbers of all items
+    for (let i = 0; i < learnList.contentItems.length; i++) {
+      learnList.contentItems[i].sequence = i + 1;
+    }
+
+    await learnList.save();
+    res.status(200).json({ message: 'Content sequence updated successfully', learnList });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error changing content sequence in Learn List:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Delete a Learn List by ID
+exports.deleteLearnList = async (req, res) => {
+  try {
+    const { learnListId } = req.params;
+
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    const learnList = await LearnList.findById(learnListId);
+
+    if (!learnList) {
+      return res.status(404).json({ message: 'Learn List not found' });
+    }
+
+    // Check if the user is the creator of the Learn List
+    if (learnList.creator.toString() !== userId) {
+      return res.status(403).json({ message: 'You do not have permission to delete this Learn List' });
+    }
+
+    await learnList.deleteOne();  // Use deleteOne instead of remove
+    res.status(200).json({ message: 'Learn List deleted successfully' });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error deleting Learn List:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get all public Learn Lists
+  exports.getAllPublicLearnLists = async (req, res) => {
+    try {
+      const learnLists = await LearnList.find({ visibility: 'public' }).populate('creator', 'username');
+
+      res.status(200).json(learnLists);
+    } catch (error) {
+      Sentry.captureException(error);
+      console.error('Error fetching public Learn Lists:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+
+// List all Learn Lists created by the logged-in user
+exports.getLearnListsByUser = async (req, res) => {
+  try {
+    // Extract the JWT token from the authorization header
+    const token = req.headers.authorization.split(' ')[1];
+    // Decode the token to get the user's ID
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    // Log the extracted userId for debugging
+    console.log('Extracted userId from token:', userId);
+
+    // Find the Learn Lists created by this user
+    const learnLists = await LearnList.find({ creator: userId }).populate('creator', 'username');
+
+    // Log the results of the query for debugging
+    console.log('Learn Lists retrieved:', learnLists);
+
+    res.status(200).json(learnLists);
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error fetching Learn Lists by user:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Search Learn Lists based on username, name, description, and related topics
+exports.searchLearnLists = async (req, res) => {
+  try {
+    const { username, name, description, relatedTopics } = req.body;
+
+    // Build the query dynamically based on the search criteria
+    let query = {};
+
+    // Search by username
+    if (username) {
+      const user = await User.findOne({ username: new RegExp(username, 'i') });
+      if (user) {
+        query.creator = user._id;
+      } else {
+        return res.status(404).json({ message: 'User not found' });
+      }
+    }
+
+    // Search by Learn List name
+    if (name) {
+      query.name = new RegExp(name, 'i'); // Case-insensitive regex search
+    }
+
+    // Search by description
+    if (description) {
+      query.description = new RegExp(description, 'i'); // Case-insensitive regex search
+    }
+
+    // Search by related topics
+    if (relatedTopics) {
+      const topicsArray = relatedTopics.split(',').map(topic => topic.trim());
+      query.relatedTopics = { $in: topicsArray };
+    }
+
+    // Perform the search with the built query
+    const learnLists = await LearnList.find(query).populate('creator', 'username');
+
+    res.status(200).json(learnLists);
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error searching Learn Lists:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 
 
 
