@@ -12,7 +12,7 @@
   const InterestView = require('../models/interestViewModel');
   const LearnList = require('../models/learnListModel');
   const LearnListProgress = require('../models/learnListProgressModel');
-
+  const Discussion = require('../models/discussionModel');
 
   const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
   const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
@@ -1528,5 +1528,85 @@ exports.getLearnListProgress = async (req, res) => {
   }
 };
 
+// Create a new discussion in a Learn List
+exports.createDiscussion = async (req, res) => {
+  try {
+    const { learnListId } = req.params;
+    const { title, text } = req.body;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    const learnList = await LearnList.findById(learnListId);
+    if (!learnList) {
+      return res.status(404).json({ message: 'Learn List not found' });
+    }
+
+    const discussion = new Discussion({
+      learnList: learnListId,
+      user: userId,
+      title,
+      text,
+    });
+
+    await discussion.save();
+
+    learnList.discussions.push(discussion._id);
+    await learnList.save();
+
+    res.status(201).json({ message: 'Discussion created successfully', discussion });
+  } catch (error) {
+    console.error('Error creating discussion:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Add a reply to a discussion
+exports.addReply = async (req, res) => {
+  try {
+    const { learnListId, discussionId } = req.params;
+    const { text } = req.body;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    const discussion = await Discussion.findById(discussionId);
+    if (!discussion) {
+      return res.status(404).json({ message: 'Discussion not found' });
+    }
+
+    const reply = {
+      user: userId,
+      text,
+    };
+
+    discussion.replies.push(reply);
+    await discussion.save();
+
+    // Populate the user information (including profile picture) for the response
+    const populatedDiscussion = await discussion.populate('replies.user', 'username profilePicture').execPopulate();
+
+    res.status(201).json({ message: 'Reply added successfully', discussion: populatedDiscussion });
+  } catch (error) {
+    console.error('Error adding reply:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get all discussions for a Learn List
+exports.getDiscussionsByLearnList = async (req, res) => {
+  try {
+    const { learnListId } = req.params;
+
+    const discussions = await Discussion.find({ learnList: learnListId })
+      .populate('user', 'username profilePicture')  // Populate the user with username and profilePicture
+      .populate('replies.user', 'username profilePicture');  // Populate the replies with username and profilePicture
+
+    res.status(200).json(discussions);
+  } catch (error) {
+    console.error('Error fetching discussions:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 
 

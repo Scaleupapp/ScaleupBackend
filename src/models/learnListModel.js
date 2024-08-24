@@ -26,13 +26,17 @@ const learnListSchema = new mongoose.Schema({
       },
     },
   ],
+  discussions: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Discussion',
+    },
+  ],
+  relatedTopics: [String],
   createdDate: {
     type: Date,
     default: Date.now,
   },
-
-  relatedTopics: [String],
-  
   visibility: {
     type: String,
     enum: ['public', 'private'],
