@@ -11,6 +11,7 @@
   const ProfileView = require('../models/profileViewModel');
   const InterestView = require('../models/interestViewModel');
   const LearnList = require('../models/learnListModel');
+  const LearnListProgress = require('../models/learnListProgressModel');
 
 
   const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
@@ -265,9 +266,6 @@
 
     return Array.from(badges);
   }
-
-
-
   // Controller function to get content details by content ID for verfification
   exports.getContentDetails = async (req, res) => {
     try {
@@ -560,8 +558,6 @@
       }
     };
     
-
-
   // Controller function to get content details by content ID
   exports.getPostDetails = async (req, res) => {
     try {
@@ -1206,23 +1202,41 @@ exports.createLearnList = async (req, res) => {
 };
 
 
-  // Get a Learn List by ID
-  exports.getLearnListById = async (req, res) => {
-    try {
-      const { learnListId } = req.params;
-      const learnList = await LearnList.findById(learnListId).populate('contentItems.content');
+ // Get a Learn List by ID and include user progress and completion percentage
+exports.getLearnListById = async (req, res) => {
+  try {
+    const { learnListId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
 
-      if (!learnList) {
-        return res.status(404).json({ message: 'Learn List not found' });
-      }
-
-      res.status(200).json(learnList);
-    } catch (error) {
-      Sentry.captureException(error);
-      console.error('Error fetching Learn List:', error);
-      res.status(500).json({ error: 'Internal server error' });
+    const learnList = await LearnList.findById(learnListId).populate('contentItems.content');
+    if (!learnList) {
+      return res.status(404).json({ message: 'Learn List not found' });
     }
-  };
+
+    const totalItems = learnList.contentItems.length;
+    const progress = await LearnListProgress.findOne({ user: userId, learnList: learnListId }).populate('completedItems.content');
+
+    let completedItemsCount = 0;
+    if (progress) {
+      completedItemsCount = progress.completedItems.length;
+    }
+
+    const completionPercentage = totalItems > 0 ? (completedItemsCount / totalItems) * 100 : 0;
+
+    res.status(200).json({
+      learnList,
+      progress,
+      completionPercentage: completionPercentage.toFixed(2), // return percentage with two decimal places
+    });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error fetching Learn List:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 
 // Add Content to an existing Learn List and manage sequences
 exports.addContentToLearnList = async (req, res) => {
@@ -1439,6 +1453,77 @@ exports.searchLearnLists = async (req, res) => {
   } catch (error) {
     Sentry.captureException(error);
     console.error('Error searching Learn Lists:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Mark content as completed in a Learn List
+exports.markContentAsCompleted = async (req, res) => {
+  try {
+    const { learnListId, contentId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    let progress = await LearnListProgress.findOne({ user: userId, learnList: learnListId });
+
+    if (!progress) {
+      // Create a new progress document if it doesn't exist
+      progress = new LearnListProgress({
+        user: userId,
+        learnList: learnListId,
+        completedItems: [{ content: contentId }],
+      });
+    } else {
+      // Add the content to the completedItems if it's not already completed
+      const alreadyCompleted = progress.completedItems.some(item => item.content.toString() === contentId);
+      if (!alreadyCompleted) {
+        progress.completedItems.push({ content: contentId });
+      }
+    }
+
+    progress.lastUpdated = Date.now();
+    await progress.save();
+
+    res.status(200).json({ message: 'Content marked as completed', progress });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error marking content as completed:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get progress for a Learn List with completion percentage
+exports.getLearnListProgress = async (req, res) => {
+  try {
+    const { learnListId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    const learnList = await LearnList.findById(learnListId);
+    if (!learnList) {
+      return res.status(404).json({ message: 'Learn List not found' });
+    }
+
+    const totalItems = learnList.contentItems.length;
+    const progress = await LearnListProgress.findOne({ user: userId, learnList: learnListId }).populate('completedItems.content');
+
+    let completedItemsCount = 0;
+    if (progress) {
+      completedItemsCount = progress.completedItems.length;
+    }
+
+    const completionPercentage = totalItems > 0 ? (completedItemsCount / totalItems) * 100 : 0;
+
+    res.status(200).json({
+      learnList,
+      progress,
+      completionPercentage: completionPercentage.toFixed(2), // return percentage with two decimal places
+    });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error retrieving Learn List progress:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

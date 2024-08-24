@@ -99,6 +99,10 @@ router.put('/:learnListId/change-sequence', contentController.changeContentSeque
 router.get('/learnList/mylists', contentController.getLearnListsByUser);
 // Route to search Learn Lists based on username, description, and related topics
 router.post('/learnList/search', contentController.searchLearnLists);
+// Route to mark content as completed
+router.put('/learnList/:learnListId/content/:contentId/complete', contentController.markContentAsCompleted);
+// Route to get progress for a Learn List
+router.get('/learnList/:learnListId/progress', contentController.getLearnListProgress);
 
 
 module.exports = router;
