@@ -33,6 +33,13 @@ const learnListSchema = new mongoose.Schema({
     },
   ],
   relatedTopics: [String],
+
+  pinnedDiscussions: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Discussion',
+    },
+  ],
   createdDate: {
     type: Date,
     default: Date.now,

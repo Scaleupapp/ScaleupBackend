@@ -46,6 +46,12 @@ router.get('/followUnfollowList', userSearchController.getFollowUnfollowList);
 // Add a route for adding a comment to a content item
 router.post('/add-comment', contentController.addComment);
 
+// Pin a comment route
+router.put('/pin-comment/:contentId/:commentId', contentController.pinComment);
+
+// Unpin a comment route
+router.put('/unpin-comment/:contentId', contentController.unpinComment);
+
 // Add a route for viewing a specific post
 router.get('/post/:contentId', contentController.getPostDetails);
 
@@ -109,6 +115,10 @@ router.post('/learnList/:learnListId/discussions', contentController.createDiscu
 router.post('/learnList/:learnListId/discussions/:discussionId/replies', contentController.addReplytoDiscussion);
 // Route to get all discussions for a Learn List
 router.get('/learnList/:learnListId/discussions', contentController.getDiscussionsByLearnList);
+// Pin a discussion
+router.put('/learnList/:learnListId/discussions/:discussionId/pin', contentController.pinDiscussion);
+// Unpin a discussion
+router.put('/learnList/:learnListId/discussions/:discussionId/unpin', contentController.unpinDiscussion);
 
 
 module.exports = router;

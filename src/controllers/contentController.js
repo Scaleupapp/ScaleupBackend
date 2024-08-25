@@ -385,6 +385,7 @@
       const filteredContent = await Content.find(baseQuery)
         .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify viewCount')
         .populate('userId', 'profilePicture username')
+        .populate('pinnedComment')
         .sort({ postdate: -1 })
         .skip(skip)
         .limit(pageSize);
@@ -582,8 +583,14 @@
         return res.status(404).json({ message: 'User not found' });
       }
 
-      // Find the content by ID and populate the user data
-      const content = await Content.findById(contentId).populate('userId', 'username isTestUser');
+          // Find the content by ID, populate the user data, and include the pinned comment
+    const content = await Content.findById(contentId)
+    .populate('userId', 'username isTestUser')
+    .populate('pinnedComment') // Populate the pinned comment
+    .populate({
+      path: 'comments',
+      populate: { path: 'userId', select: 'username profilePicture' },
+    });
 
       if (!content) {
         return res.status(404).json({ error: 'Content not found' });
@@ -608,6 +615,7 @@
         CommentCount: content.CommentCount,
         contentType: content.contentType,
         viewCount: content.viewCount,
+        pinnedComment: content.pinnedComment,
       };
 
       res.json({ contentDetails });
@@ -1653,23 +1661,34 @@ exports.addReplytoDiscussion = async (req, res) => {
   }
 };
 
-
-
-// Get all discussions for a Learn List
 exports.getDiscussionsByLearnList = async (req, res) => {
   try {
     const { learnListId } = req.params;
 
-    const discussions = await Discussion.find({ learnList: learnListId })
-      .populate('user', 'username profilePicture')  // Populate the user with username and profilePicture
-      .populate('replies.user', 'username profilePicture');  // Populate the replies with username and profilePicture
+    const learnList = await LearnList.findById(learnListId)
+      .populate({
+        path: 'pinnedDiscussions',
+        populate: { path: 'user', select: 'username profilePicture' },
+      })
+      .populate({
+        path: 'discussions',
+        populate: { path: 'user replies.user', select: 'username profilePicture' },
+      });
+
+    if (!learnList) {
+      return res.status(404).json({ message: 'Learn List not found' });
+    }
+
+    const discussions = [...learnList.pinnedDiscussions, ...learnList.discussions];
 
     res.status(200).json(discussions);
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Error fetching discussions:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
 
 const parseMentions = async (text) => {
   const mentionedUsernames = text.match(/@(\w+)/g);
@@ -1679,3 +1698,136 @@ const parseMentions = async (text) => {
   return User.find({ username: { $in: uniqueUsernames } }).select('_id username');
 };
 
+// Controller function to pin a discussion to the top of the Learn List
+exports.pinDiscussion = async (req, res) => {
+  try {
+    const { learnListId, discussionId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    const learnList = await LearnList.findById(learnListId);
+    if (!learnList) {
+      return res.status(404).json({ message: 'Learn List not found' });
+    }
+
+    // Check if the user is the creator of the Learn List
+    if (learnList.creator.toString() !== userId) {
+      return res.status(403).json({ message: 'You do not have permission to pin this discussion' });
+    }
+
+    // Check if the discussion is already pinned
+    if (learnList.pinnedDiscussions.includes(discussionId)) {
+      return res.status(400).json({ message: 'Discussion is already pinned' });
+    }
+
+    learnList.pinnedDiscussions.push(discussionId);
+    await learnList.save();
+
+    res.status(200).json({ message: 'Discussion pinned successfully', pinnedDiscussions: learnList.pinnedDiscussions });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error pinning discussion:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Controller function to unpin a discussion from the Learn List
+exports.unpinDiscussion = async (req, res) => {
+  try {
+    const { learnListId, discussionId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    const learnList = await LearnList.findById(learnListId);
+    if (!learnList) {
+      return res.status(404).json({ message: 'Learn List not found' });
+    }
+
+    // Check if the user is the creator of the Learn List
+    if (learnList.creator.toString() !== userId) {
+      return res.status(403).json({ message: 'You do not have permission to unpin this discussion' });
+    }
+
+    // Check if the discussion is pinned
+    const discussionIndex = learnList.pinnedDiscussions.indexOf(discussionId);
+    if (discussionIndex === -1) {
+      return res.status(400).json({ message: 'Discussion is not pinned' });
+    }
+
+    learnList.pinnedDiscussions.splice(discussionIndex, 1);
+    await learnList.save();
+
+    res.status(200).json({ message: 'Discussion unpinned successfully', pinnedDiscussions: learnList.pinnedDiscussions });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error unpinning discussion:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Pin a comment
+exports.pinComment = async (req, res) => {
+  try {
+    const { contentId, commentId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    const content = await Content.findById(contentId);
+    if (!content) {
+      return res.status(404).json({ error: 'Content not found' });
+    }
+
+    // Verify the user is the owner of the content
+    if (content.userId.toString() !== userId) {
+      return res.status(403).json({ message: 'You do not have permission to pin this comment' });
+    }
+
+    const comment = await Comment.findById(commentId);
+    if (!comment) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+
+    // Update the pinnedComment field
+    content.pinnedComment = commentId;
+    await content.save();
+
+    res.status(200).json({ message: 'Comment pinned successfully', pinnedComment: content.pinnedComment });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error pinning comment:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Unpin a comment
+exports.unpinComment = async (req, res) => {
+  try {
+    const { contentId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    const content = await Content.findById(contentId);
+    if (!content) {
+      return res.status(404).json({ error: 'Content not found' });
+    }
+
+    // Verify the user is the owner of the content
+    if (content.userId.toString() !== userId) {
+      return res.status(403).json({ message: 'You do not have permission to unpin this comment' });
+    }
+
+    // Update the pinnedComment field to null
+    content.pinnedComment = null;
+    await content.save();
+
+    res.status(200).json({ message: 'Comment unpinned successfully' });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error unpinning comment:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};

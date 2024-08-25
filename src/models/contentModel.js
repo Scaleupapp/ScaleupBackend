@@ -68,6 +68,13 @@ const contentSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+
+  pinnedComment: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Comment', // Reference to the Comment model
+    default: null, // Default to null if no comment is pinned
+  },
+
   smeVerify: {
     type: String,
     enum: ['NA', 'Pending', 'Accepted', 'Rejected','Revise'],
