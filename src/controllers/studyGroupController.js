@@ -452,7 +452,6 @@ const handleJoinRequest = async (req, res) => {
     }
 };
 
-// Sending a message to the study group with S3 integration for attachments
 const sendGroupMessage = async (req, res) => {
   try {
     const { groupId, message } = req.body;
@@ -460,6 +459,12 @@ const sendGroupMessage = async (req, res) => {
     const token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, jwtSecret);
     const senderId = decoded.userId;
+
+    // Fetch the sender's user details to get the username
+    const sender = await User.findById(senderId);
+    if (!sender) {
+      return res.status(404).json({ message: 'User not found' });
+    }
 
     const group = await StudyGroup.findById(groupId);
 
@@ -502,6 +507,24 @@ const sendGroupMessage = async (req, res) => {
     // Emit the message to all connected clients in the group
     io.to(groupId).emit("receiveMessage", newMessage);
 
+    // Parse the message content to detect mentions and notify mentioned users
+    const mentionedUsernames = message.match(/@(\w+)/g);
+    if (mentionedUsernames) {
+      for (const mentionedUsername of mentionedUsernames) {
+        const username = mentionedUsername.slice(1); // Remove the "@" symbol
+        const mentionedUser = await User.findOne({ username });
+
+        if (mentionedUser && mentionedUser._id.toString() !== senderId) {
+          const recipientId = mentionedUser._id;
+          const type = 'mention';
+          const notificationContent = `${sender.username} mentioned you in a group message.`;
+          const link = `/api/groups/${groupId}/messages`;
+
+          await createNotification(recipientId, senderId, type, notificationContent, link);
+        }
+      }
+    }
+
     res.status(200).json({ message: 'Message sent successfully', newMessage });
   } catch (error) {
     Sentry.captureException(error);
@@ -509,6 +532,7 @@ const sendGroupMessage = async (req, res) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 
 // Retrieving messages from the study group
 const getGroupMessages = async (req, res) => {
@@ -623,7 +647,27 @@ const editGroupMessage = async (req, res) => {
 
     await group.save();
 
+    // Emit the edited message to all connected clients in the group
     io.to(groupId).emit("messageEdited", { messageId, content });
+
+    // Parse the content to detect mentions and notify mentioned users
+    const mentionedUsernames = content.match(/@(\w+)/g);
+    if (mentionedUsernames) {
+      for (const mentionedUsername of mentionedUsernames) {
+        const username = mentionedUsername.slice(1); // Remove the "@" symbol
+        const mentionedUser = await User.findOne({ username });
+
+        if (mentionedUser && mentionedUser._id.toString() !== userId) {
+          const recipientId = mentionedUser._id;
+          const senderId = decoded.userId;
+          const type = 'mention';
+          const notificationContent = `${sender.username} mentioned you in a group message.`;
+          const link = `/api/groups/${groupId}/messages`;
+
+          await createNotification(recipientId, senderId, type, notificationContent, link);
+        }
+      }
+    }
 
     res.status(200).json({ message: "Message edited successfully", message });
   } catch (error) {
@@ -632,6 +676,7 @@ const editGroupMessage = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
 
 
 const deleteGroupMessage = async (req, res) => {

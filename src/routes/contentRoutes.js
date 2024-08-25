@@ -106,7 +106,7 @@ router.get('/learnList/:learnListId/progress', contentController.getLearnListPro
 // Route to create a new discussion thread in a Learn List
 router.post('/learnList/:learnListId/discussions', contentController.createDiscussion);
 // Route to add a reply to a discussion
-router.post('/learnList/:learnListId/discussions/:discussionId/replies', contentController.addReply);
+router.post('/learnList/:learnListId/discussions/:discussionId/replies', contentController.addReplytoDiscussion);
 // Route to get all discussions for a Learn List
 router.get('/learnList/:learnListId/discussions', contentController.getDiscussionsByLearnList);
 

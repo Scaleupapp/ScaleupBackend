@@ -510,8 +510,7 @@
       }
     };
 
-    // Controller function to add a comment
-  exports.addComment = async (req, res) => {
+    exports.addComment = async (req, res) => {
       try {
         const { contentId, commentText } = req.body;
         const token = req.headers.authorization.split(' ')[1];
@@ -540,12 +539,19 @@
         content.CommentCount = content.comments.length;
         await content.save();
     
-        // Update interests for the user
-        const relatedTopics = content.relatedTopics || [];
-        const hashtags = content.hashtags || [];
-        await updateInterests(userId, [...relatedTopics, ...hashtags]);
+        // Handle mentions
+        const mentionedUsers = await parseMentions(commentText);
+        for (const mentionedUser of mentionedUsers) {
+          await exports.createNotification(
+            mentionedUser._id,
+            userId,
+            'mention',
+            `${user.username} mentioned you in a comment.`,
+            `/api/content/post/${contentId}`
+          );
+        }
     
-        // Create a notification
+        // Normal comment notification
         if (content.userId.toString() !== userId) {
           await exports.createNotification(content.userId, userId, 'comment', `${user.username} commented on your post.`, `/api/content/post/${contentId}`);
         }
@@ -1009,34 +1015,33 @@
     }
   };
 
-  // Controller function to add a reply to a comment
   exports.addReply = async (req, res) => {
     try {
       const { contentId, commentText, parentCommentId } = req.body;
       const token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       const userId = decoded.userId;
-
+  
       const user = await User.findById(userId);
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
-
+  
       const content = await Content.findById(contentId);
       if (!content) {
         return res.status(404).json({ error: 'Content not found' });
       }
-
+  
       const parentComment = await Comment.findById(parentCommentId);
       if (!parentComment) {
         return res.status(404).json({ error: 'Parent comment not found' });
       }
-
+  
       const contentOwnerUserSettings = await UserSettings.findOne({ userId: content.userId });
       if (!contentOwnerUserSettings) {
         return res.status(404).json({ error: 'Content owner settings not found' });
       }
-
+  
       const contentOwnerCommentPrivileges = contentOwnerUserSettings.commentPrivacy;
       if (
         contentOwnerCommentPrivileges === 'everyone' ||
@@ -1049,28 +1054,48 @@
           commentText: commentText,
           parentCommentId: parentCommentId,
         });
-
+  
         await newComment.save();
-
+  
         parentComment.replies.push(newComment._id);
         await parentComment.save();
-
+  
         content.comments.push(newComment._id);
         await content.save();
-
+  
         content.CommentCount = content.comments.length;
         await content.save();
-
+  
+        // Notify the owner of the content
         if (content.userId.toString() !== userId) {
           const recipientId = content.userId;
           const senderId = userId;
           const type = 'reply';
           const notificationContent = `${user.username} replied to your comment.`;
           const link = `/api/content/post/${contentId}`;
-
+  
           await exports.createNotification(recipientId, senderId, type, notificationContent, link);
         }
-
+  
+        // Parse the comment text to detect mentions and notify mentioned users
+        const mentionedUsernames = commentText.match(/@(\w+)/g);
+        if (mentionedUsernames) {
+          for (const mentionedUsername of mentionedUsernames) {
+            const username = mentionedUsername.slice(1); // Remove the "@" symbol
+            const mentionedUser = await User.findOne({ username });
+  
+            if (mentionedUser && mentionedUser._id.toString() !== userId) {
+              const recipientId = mentionedUser._id;
+              const senderId = userId;
+              const type = 'mention';
+              const notificationContent = `${user.username} mentioned you in a reply.`;
+              const link = `/api/content/post/${contentId}`;
+  
+              await exports.createNotification(recipientId, senderId, type, notificationContent, link);
+            }
+          }
+        }
+  
         res.status(200).json({
           message: 'Reply added successfully',
           comment: {
@@ -1561,14 +1586,19 @@ exports.createDiscussion = async (req, res) => {
   }
 };
 
-// Add a reply to a discussion
-exports.addReply = async (req, res) => {
+exports.addReplytoDiscussion = async (req, res) => {
   try {
     const { learnListId, discussionId } = req.params;
     const { text } = req.body;
     const token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const userId = decoded.userId;
+
+    // Fetch the user's details to get the username
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
 
     const discussion = await Discussion.findById(discussionId);
     if (!discussion) {
@@ -1584,7 +1614,37 @@ exports.addReply = async (req, res) => {
     await discussion.save();
 
     // Populate the user information (including profile picture) for the response
-    const populatedDiscussion = await discussion.populate('replies.user', 'username profilePicture').execPopulate();
+    const populatedDiscussion = await discussion.populate('replies.user', 'username profilePicture');
+
+    // Notify the discussion owner
+    if (discussion.user.toString() !== userId) {
+      const recipientId = discussion.user;
+      const senderId = userId;
+      const type = 'reply';
+      const notificationContent = `${user.username} replied to your discussion.`;
+      const link = `/api/learnList/${learnListId}/discussion/${discussionId}`;
+
+      await exports.createNotification(recipientId, senderId, type, notificationContent, link);
+    }
+
+    // Parse the reply text to detect mentions and notify mentioned users
+    const mentionedUsernames = text.match(/@(\w+)/g);
+    if (mentionedUsernames) {
+      for (const mentionedUsername of mentionedUsernames) {
+        const username = mentionedUsername.slice(1); // Remove the "@" symbol
+        const mentionedUser = await User.findOne({ username });
+
+        if (mentionedUser && mentionedUser._id.toString() !== userId) {
+          const recipientId = mentionedUser._id;
+          const senderId = userId;
+          const type = 'mention';
+          const notificationContent = `${user.username} mentioned you in a reply.`;
+          const link = `/api/learnList/${learnListId}/discussion/${discussionId}`;
+
+          await exports.createNotification(recipientId, senderId, type, notificationContent, link);
+        }
+      }
+    }
 
     res.status(201).json({ message: 'Reply added successfully', discussion: populatedDiscussion });
   } catch (error) {
@@ -1592,6 +1652,8 @@ exports.addReply = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+
 
 // Get all discussions for a Learn List
 exports.getDiscussionsByLearnList = async (req, res) => {
@@ -1609,4 +1671,11 @@ exports.getDiscussionsByLearnList = async (req, res) => {
   }
 };
 
+const parseMentions = async (text) => {
+  const mentionedUsernames = text.match(/@(\w+)/g);
+  if (!mentionedUsernames) return [];
+
+  const uniqueUsernames = [...new Set(mentionedUsernames.map(u => u.slice(1)))];
+  return User.find({ username: { $in: uniqueUsernames } }).select('_id username');
+};
 
