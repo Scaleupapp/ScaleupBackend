@@ -13,6 +13,7 @@ const userRoute = require("./routes/userRoute");
 const authRoute = require("./routes/authRoute");
 const contentRoute = require("./routes/contentRoutes");
 const chatRoute = require("./routes/chatRoute");
+const quizRoutes = require('./routes/quizRoutes');
 const conversationRoute = require("./routes/conversationRoute");
 const studyGroupController = require("./controllers/studyGroupController");
 const chatController = require("./controllers/chatController");
@@ -77,6 +78,7 @@ app.use("/api/users", userRoute);
 app.use("/api/content", contentRoute);
 app.use("/api/chat", chatRoute);
 app.use("/api/conversation", conversationRoute);
+app.use('/api/quiz', quizRoutes);
 
 // Socket.IO setup for real-time messaging
 io.on("connection", (socket) => {

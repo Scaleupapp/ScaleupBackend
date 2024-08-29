@@ -7,6 +7,11 @@ const innerCircleRequestSchema = new Schema({
   status: { type: String, default: 'Pending' },
 });
 
+const quizParticipationSchema = new Schema({
+  quizId: { type: mongoose.Schema.Types.ObjectId, ref: 'Quiz', required: true },
+  joinedAt: { type: Date, default: Date.now }
+});
+
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   email: { type: String, required: true, unique: true },
@@ -49,6 +54,7 @@ const userSchema = new mongoose.Schema({
   lastLoginDate: { type: Date }, // New field to track the last login date
   streakCount: { type: Number, default: 0 }, // New field to track the login streak
   streakLabel: { type: String, default: 'No streak' },
+  quizParticipation: [quizParticipationSchema],
 }, { collection: 'Users' });
 
 const User = mongoose.model('User', userSchema);
