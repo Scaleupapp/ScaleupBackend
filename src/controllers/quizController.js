@@ -7,6 +7,7 @@ const Quiz = require('../models/quizModel'); // Import the Quiz model
 const Sentry = require('@sentry/node'); // Import Sentry
 require('dotenv').config();
 const OpenAI = require('openai');
+const { createNotification } = require('./contentController');
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY, // Ensure your API key is stored securely
@@ -335,6 +336,108 @@ exports.joinQuiz = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+exports.initiateQuizParticipation = async (req, res) => {
+  try {
+    const { quizId } = req.body;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    // Find the quiz
+    const quiz = await Quiz.findById(quizId);
+    if (!quiz) {
+      return res.status(404).json({ message: 'Quiz not found' });
+    }
+
+    // Check if the user is a participant
+    const participant = quiz.participants.find(part => part.userId.toString() === userId);
+    if (!participant) {
+      return res.status(400).json({ message: 'You are not a participant of this quiz' });
+    }
+
+    // Check if the quiz has already started
+    if (quiz.hasStarted) {
+      return res.status(400).json({ message: 'The quiz has already started' });
+    }
+
+    // Mark the participant as having joined the waiting room
+    participant.hasJoined = true;
+    await quiz.save();
+
+    res.status(200).json({ message: 'You have joined the waiting room' });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error initiating quiz participation:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.startQuiz = async (req, res) => {
+  try {
+    const { quizId } = req.body;
+
+    // Find the quiz
+    const quiz = await Quiz.findById(quizId);
+    if (!quiz) {
+      return res.status(404).json({ message: 'Quiz not found' });
+    }
+
+    // Check if the quiz has already started
+    if (quiz.hasStarted) {
+      return res.status(400).json({ message: 'Quiz has already started' });
+    }
+
+    const currentTime = new Date();
+
+    // Check if the quiz is being started before the official start time
+    if (currentTime < quiz.startTime) {
+      return res.status(400).json({ message: 'Cannot start the quiz before the official start time' });
+    }
+
+    // Notify participants that the quiz is starting in two minutes
+    if (!quiz.startNotificationSent) {
+      for (const participant of quiz.participants) {
+        await createNotification(
+          participant.userId, 
+          null, 
+          'quiz_start', 
+          `Quiz "${quiz.topic}" is about to start in 2 minutes. Prepare yourself!`, 
+          `/quiz/initiate-room/${quiz._id}`
+        );
+      }
+      quiz.startNotificationSent = true;
+    }
+
+    // Save the quiz state to indicate the notification was sent
+    await quiz.save();
+
+    // Wait for two minutes before officially starting the quiz
+    setTimeout(async () => {
+      // Record the exact start time
+      quiz.hasStarted = true;
+      quiz.actualStartTime = new Date(); // Save the exact start time
+      quiz.endTime = new Date(quiz.actualStartTime.getTime() + 5 * 60 * 1000); // Set the quiz to end 5 minutes after the start time
+
+      await quiz.save();
+
+      // Automatically end the quiz after 5 minutes
+      setTimeout(async () => {
+        quiz.hasEnded = true;
+        await quiz.save();
+        console.log(`Quiz "${quiz.topic}" has ended.`);
+      }, 5 * 60 * 1000);
+
+    }, 2 * 60 * 1000);
+
+    res.status(200).json({ message: 'Quiz will start in 2 minutes' });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error starting quiz:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 
 
 

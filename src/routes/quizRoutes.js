@@ -16,5 +16,10 @@ router.get('/search', quizController.searchQuizzes);
 router.get('/recommend', quizController.recommendQuizzes);
 // Join a quiz
 router.post('/join', quizController.joinQuiz);
+// Initiate quiz participation (Join the waiting room)
+router.post('/initiate', quizController.initiateQuizParticipation);
+// Start a quiz (Admin only)
+router.post('/start', quizController.startQuiz);
+
 
 module.exports = router;

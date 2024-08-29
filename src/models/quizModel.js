@@ -17,11 +17,11 @@ const quizSchema = new mongoose.Schema({
   isPaid: { type: Boolean, default: false },
   entryFee: { type: Number, default: 0 }, // For free quizzes
   startTime: { type: Date, required: true },
-  endTime: { type: Date, required: true },
   participants: [
     {
       userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
       hasPaid: { type: Boolean, default: false },
+      hasJoined: { type: Boolean, default: false },
     },
   ],
   prizePool: { type: Number, default: 0 },
@@ -39,6 +39,12 @@ const quizSchema = new mongoose.Schema({
   isPrizeDistributed: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
   quizTopics: [{ type: String }], 
+  hasStarted: { type: Boolean, default: false },
+  startNotificationSent: { type: Boolean, default: false },
+  actualStartTime: { type: Date, default: null }, // Record the actual start time
+  endTime: { type: Date, default: null }, // Set the official stop time
+  hasEnded: { type: Boolean, default: false }, // Indicate if the quiz has ended
+
 });
 
 const Quiz = mongoose.model('Quiz', quizSchema);
