@@ -32,9 +32,18 @@ const quizSchema = new mongoose.Schema({
     thirdPlace: { type: Number, default: 0 },
   },
   winners: {
-    first: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
-    second: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
-    third: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    first: {
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+      totalPoints: { type: Number, default: 0 }
+    },
+    second: {
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+      totalPoints: { type: Number, default: 0 }
+    },
+    third: {
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+      totalPoints: { type: Number, default: 0 }
+    }
   },
   isPrizeDistributed: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },

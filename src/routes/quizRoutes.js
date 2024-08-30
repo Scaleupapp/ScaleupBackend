@@ -20,6 +20,9 @@ router.post('/join', quizController.joinQuiz);
 router.post('/initiate', quizController.initiateQuizParticipation);
 // Start a quiz (Admin only)
 router.post('/start', quizController.startQuiz);
-
+// Submit an answer (called for each question)
+router.post('/submit-answer', quizController.submitAnswer);
+// End the quiz and calculate results (automated process)
+router.post('/end-quiz', quizController.endQuizAndCalculateResults);
 
 module.exports = router;

@@ -54,6 +54,8 @@ const userSchema = new mongoose.Schema({
   lastLoginDate: { type: Date }, // New field to track the last login date
   streakCount: { type: Number, default: 0 }, // New field to track the login streak
   streakLabel: { type: String, default: 'No streak' },
+  totalPoints: { type: Number, default: 0 },
+  level: { type: String, default: 'Beginner' },
   quizParticipation: [quizParticipationSchema],
 }, { collection: 'Users' });
 
