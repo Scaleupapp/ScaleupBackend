@@ -177,23 +177,28 @@ exports.editQuiz = async (req, res) => {
 
 exports.listAllQuizzes = async (req, res) => {
     try {
-        // Verify the user's identity using the JWT token
         const token = req.headers.authorization.split(' ')[1];
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const userId = decoded.userId;
 
-        // Pagination parameters
         const page = parseInt(req.query.page) || 1;
         const pageSize = parseInt(req.query.pageSize) || 10;
         const skip = (page - 1) * pageSize;
 
-        // Find all quizzes excluding those created by the user
-        const quizzes = await Quiz.find({ creator: { $ne: userId } })
-            .skip(skip)
-            .limit(pageSize)
-            .sort({ createdAt: -1 });
+        const currentTime = new Date();
 
-        const totalQuizzes = await Quiz.countDocuments({ creator: { $ne: userId } });
+        const quizzes = await Quiz.find({
+            creator: { $ne: userId },
+            startTime: { $gt: currentTime } // Filter quizzes with startTime in the future
+        })
+        .skip(skip)
+        .limit(pageSize)
+        .sort({ createdAt: -1 });
+
+        const totalQuizzes = await Quiz.countDocuments({
+            creator: { $ne: userId },
+            startTime: { $gt: currentTime } // Count quizzes with startTime in the future
+        });
 
         res.status(200).json({
             quizzes,
@@ -212,7 +217,6 @@ exports.listAllQuizzes = async (req, res) => {
 
 exports.searchQuizzes = async (req, res) => {
   try {
-    // Verify the user's identity using the JWT token
     const token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const userId = decoded.userId;
@@ -223,18 +227,13 @@ exports.searchQuizzes = async (req, res) => {
     }
 
     const regex = new RegExp(query, 'i');
+    const currentTime = new Date();
 
-    // Log the regex for debugging
-    console.log('Search Regex:', regex);
-
-    // Search for quizzes excluding those created by the user
     const quizzes = await Quiz.find({
       topic: { $regex: regex },
-      creator: { $ne: userId }
+      creator: { $ne: userId },
+      startTime: { $gt: currentTime } // Filter quizzes with startTime in the future
     }).sort({ createdAt: -1 });
-
-    // Log the number of results for debugging
-    console.log('Number of quizzes found:', quizzes.length);
 
     res.status(200).json({ quizzes });
   } catch (error) {
@@ -256,13 +255,12 @@ exports.recommendQuizzes = async (req, res) => {
       }
 
       const userInterests = user.bio.bioInterests.map(interest => new RegExp(interest, 'i'));
+      const currentTime = new Date();
 
       const recommendedQuizzes = await Quiz.find({
-        topic: { $in: userInterests }
+        topic: { $in: userInterests },
+        startTime: { $gt: currentTime } // Filter quizzes with startTime in the future
       }).sort({ createdAt: -1 });
-      // Log the number of results for debugging
-    console.log('Number of quizzes found:', recommendedQuizzes.length);
-
 
       res.status(200).json({ recommendedQuizzes });
   } catch (error) {
