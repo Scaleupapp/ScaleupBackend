@@ -8,6 +8,7 @@ const Sentry = require('@sentry/node'); // Import Sentry
 require('dotenv').config();
 const OpenAI = require('openai');
 const { createNotification } = require('./contentController');
+const AreaOfImprovement = require('../models/areaOfImprovementModel');
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY, // Ensure your API key is stored securely
@@ -268,7 +269,7 @@ exports.recommendQuizzes = async (req, res) => {
       console.error('Error recommending quizzes:', error);
       res.status(500).json({ error: 'Internal server error' });
   }
-};
+};  
 
 exports.joinQuiz = async (req, res) => {
   try {
@@ -471,6 +472,17 @@ exports.submitAnswer = async (req, res) => {
 
     userQuizResult.totalScore += pointsAwarded;
     await userQuizResult.save();
+
+    // Update Area of Improvement if the answer is incorrect
+    if (!correct) {
+      for (const topic of question.relatedTopics) {
+        await AreaOfImprovement.findOneAndUpdate(
+          { userId, topic },
+          { $inc: { count: 1 } },
+          { upsert: true, new: true }
+        );
+      }
+    }
 
     // Check if all participants have completed the quiz
     const allResults = await UserQuizResult.find({ quizId });
