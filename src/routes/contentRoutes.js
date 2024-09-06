@@ -11,6 +11,12 @@ const upload = multer({ storage: storage });
 // Create Content route
 router.post('/create', upload.single('media'), contentController.addContent);
 
+//List Draft Items
+router.get('/drafts', contentController.listDrafts);
+
+router.put('/publish/:contentId', contentController.publishDraft);
+
+
 // Add a route for listing pending verification content
 router.get('/pending-verification', contentController.listPendingVerificationContent);
 

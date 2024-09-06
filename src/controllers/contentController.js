@@ -29,43 +29,38 @@
 
   exports.addContent = async (req, res) => {
     try {
-      const { captions, hashtags, heading, verify, relatedTopics, contentType } = req.body;
+      const { captions, hashtags, heading, verify, relatedTopics, contentType, isDraft } = req.body;
       const contentFile = req.file;
-
+  
       // Verify the user's identity using the JWT token
       const token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
-
-      // Get the user's ID from the decoded token
       const userId = decoded.userId;
-
+  
       const user = await User.findById(userId);
-
+  
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
-
+  
       // Create folder structure on S3
       const uniqueFolderName = `${userId}/${heading}_${Date.now()}/`;
-
+  
       // Upload the file to S3
       const params = {
         Bucket: 'scaleupbucket',
-        Key: `${uniqueFolderName}${contentFile.originalname}`, // You can adjust the file naming here
+        Key: `${uniqueFolderName}${contentFile.originalname}`,
         Body: contentFile.buffer,
         ContentType: contentFile.mimetype,
-        ACL: 'public-read', // Set ACL to public-read
-
+        ACL: 'public-read',
       };
-
+  
       s3.upload(params, async (err, data) => {
         if (err) {
           console.error('S3 upload error:', err);
           return res.status(500).json({ error: 'Failed to upload content' });
         }
-
-        
-
+  
         // Create a new content document in MongoDB
         const newContent = new Content({
           username: user.username,
@@ -74,21 +69,77 @@
           heading: heading,
           verify: verify,
           relatedTopics: relatedTopics.split(',').map(topic => topic.trim()),
-          contentURL: data.Location, // Store S3 URL in the contentURL field
-          userId: user._id ,// Link the content to the user who created it
+          contentURL: data.Location,
+          userId: user._id,
           smeVerify: user.role === 'Subject Matter Expert' ? 'Accepted' : verify === 'Yes' ? 'Pending' : 'NA',
-          contentType : contentType,
-        
-
+          contentType: contentType,
+          isDraft: isDraft === 'true', // Save as draft if isDraft is true
+          postdate: isDraft === 'false' ? Date.now() : null, // Set postdate only if published
         });
-
+  
         await newContent.save();
-
-        return res.status(200).json({ message: 'Content added successfully' });
+  
+        return res.status(200).json({ message: isDraft === 'true' ? 'Content saved as draft' : 'Content published successfully' });
       });
     } catch (error) {
       Sentry.captureException(error);
       console.error('Content creation error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+
+  exports.listDrafts = async (req, res) => {
+    try {
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, jwtSecret);
+      const userId = decoded.userId;
+  
+      const drafts = await Content.find({ userId, isDraft: true });
+  
+      res.status(200).json({ drafts });
+    } catch (error) {
+      Sentry.captureException(error);
+      console.error('Error fetching drafts:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+  
+  exports.publishDraft = async (req, res) => {
+    try {
+      const { contentId } = req.params;
+  
+      // Extract the JWT token from the authorization header
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET); // Replace with your JWT secret key
+      const userId = decoded.userId; // Extract user ID from the decoded token
+  
+      // Find the content by its ID
+      const content = await Content.findById(contentId);
+  
+      // Check if content exists
+      if (!content) {
+        return res.status(404).json({ error: 'Content not found' });
+      }
+  
+      // Ensure that the authenticated user is the owner of the content
+      if (content.userId.toString() !== userId) {
+        return res.status(403).json({ message: 'You do not have permission to publish this content' });
+      }
+  
+      // Check if the content is still in draft mode
+      if (content.isDraft) {
+        content.isDraft = false;
+        content.postdate = Date.now(); // Set the postdate when publishing
+  
+        await content.save();
+  
+        res.status(200).json({ message: 'Content published successfully' });
+      } else {
+        res.status(400).json({ message: 'Content is already published' });
+      }
+    } catch (error) {
+      Sentry.captureException(error); // Optional: If you use Sentry for error logging
+      console.error('Error publishing content:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   };
@@ -120,6 +171,7 @@
       let baseQuery = {
         smeVerify: { $in: ['Pending', ] }, 
         userId: { $nin: smeUserIds },
+        isDraft: false,
         $or: [
           { hashtags: { $in: userBioInterests.map(tag => new RegExp(tag, 'i')) } },
           { relatedTopics: { $in: userBioInterests.map(topic => new RegExp(topic, 'i')) } }
@@ -358,6 +410,7 @@
       // Create the base query
       let baseQuery = {
         userId: { $nin: [...blockedUserIds, ...usersWhoBlockedLoggedInUserIds] },
+        isDraft: false,
         $or: [
           { hashtags: { $in: userBioInterests.map(tag => new RegExp(tag, 'i')) } },
           { relatedTopics: { $in: userBioInterests.map(topic => new RegExp(topic, 'i')) } },

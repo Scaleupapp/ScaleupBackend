@@ -26,7 +26,7 @@ const contentSchema = new mongoose.Schema({
   },
   postdate: {
     type: Date,
-    default: Date.now,
+    default: null, // Only set when the content is published
   },
   likes: [
     {
@@ -73,6 +73,11 @@ const contentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Comment', // Reference to the Comment model
     default: null, // Default to null if no comment is pinned
+  },
+
+  isDraft: {
+    type: Boolean,
+    default: true, // Content starts as draft by default
   },
 
   smeVerify: {
