@@ -9,7 +9,11 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 // Create Content route
-router.post('/create', upload.single('media'), contentController.addContent);
+router.post('/create', upload.fields([
+    { name: 'media', maxCount: 1 },    // Video file
+    { name: 'thumbnail', maxCount: 1 } // Thumbnail image
+  ]), contentController.addContent);
+  
 
 //List Draft Items
 router.get('/drafts', contentController.listDrafts);

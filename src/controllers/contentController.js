@@ -30,15 +30,21 @@
   exports.addContent = async (req, res) => {
     try {
       const { captions, hashtags, heading, verify, relatedTopics, contentType, isDraft } = req.body;
-      const contentFile = req.file;
+  
+      // Access the uploaded files
+      const contentFile = req.files?.media ? req.files['media'][0] : null;
+      const thumbnailFile = req.files?.thumbnail ? req.files['thumbnail'][0] : null;
+  
+      if (!contentFile) {
+        return res.status(400).json({ error: 'Content file is required' });
+      }
   
       // Verify the user's identity using the JWT token
       const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
+      const decoded = jwt.verify(token, jwtSecret);
       const userId = decoded.userId;
   
       const user = await User.findById(userId);
-  
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
@@ -46,8 +52,8 @@
       // Create folder structure on S3
       const uniqueFolderName = `${userId}/${heading}_${Date.now()}/`;
   
-      // Upload the file to S3
-      const params = {
+      // Prepare content file upload params
+      const contentParams = {
         Bucket: 'scaleupbucket',
         Key: `${uniqueFolderName}${contentFile.originalname}`,
         Body: contentFile.buffer,
@@ -55,10 +61,26 @@
         ACL: 'public-read',
       };
   
-      s3.upload(params, async (err, data) => {
+      // Upload the content file to S3
+      s3.upload(contentParams, async (err, contentData) => {
         if (err) {
-          console.error('S3 upload error:', err);
+          console.error('S3 content upload error:', err);
           return res.status(500).json({ error: 'Failed to upload content' });
+        }
+  
+        // If thumbnail is uploaded, upload the thumbnail to S3
+        let thumbnailURL = null;
+        if (thumbnailFile) {
+          const thumbnailParams = {
+            Bucket: 'scaleupbucket',
+            Key: `${uniqueFolderName}${thumbnailFile.originalname}`,
+            Body: thumbnailFile.buffer,
+            ContentType: thumbnailFile.mimetype,
+            ACL: 'public-read',
+          };
+  
+          const thumbnailUpload = await s3.upload(thumbnailParams).promise();
+          thumbnailURL = thumbnailUpload.Location; // Get thumbnail URL
         }
   
         // Create a new content document in MongoDB
@@ -69,7 +91,8 @@
           heading: heading,
           verify: verify,
           relatedTopics: relatedTopics.split(',').map(topic => topic.trim()),
-          contentURL: data.Location,
+          contentURL: contentData.Location, // S3 URL of the main content
+          thumbnailURL: thumbnailURL, // S3 URL of the thumbnail (if available)
           userId: user._id,
           smeVerify: user.role === 'Subject Matter Expert' ? 'Accepted' : verify === 'Yes' ? 'Pending' : 'NA',
           contentType: contentType,
@@ -87,7 +110,7 @@
       res.status(500).json({ error: 'Internal server error' });
     }
   };
-
+  
   exports.listDrafts = async (req, res) => {
     try {
       const token = req.headers.authorization.split(' ')[1];
@@ -190,7 +213,7 @@
       const totalPendingContent = await Content.countDocuments(baseQuery);
 
       const pendingContent = await Content.find(baseQuery)
-        .select('username postdate relatedTopics hashtags _id captions heading contentURL rating smeVerify smeComments smeCommentsHistory contentType userId')
+        .select('username postdate relatedTopics hashtags _id captions heading contentURL thumbnailURL rating smeVerify smeComments smeCommentsHistory contentType userId')
         .populate('userId', 'username totalRating profilePicture')
         .sort({ postdate: -1 })
         .skip(skip)
@@ -359,6 +382,7 @@
         captions: content.captions,
         heading: content.heading,
         contentURL: content.contentURL,
+        thumbnailURL: content.thumbnailURL,
         rating: content.rating,
         smeVerify: content.smeVerify,
         smeComments: content.smeComments,
@@ -436,7 +460,7 @@
 
       // Fetch the paginated content
       const filteredContent = await Content.find(baseQuery)
-        .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify viewCount')
+        .select('username postdate heading hashtags relatedTopics captions contentURL thumbnailURL likes comments contentType smeVerify viewCount')
         .populate('userId', 'profilePicture username')
         .populate('pinnedComment')
         .sort({ postdate: -1 })
@@ -664,6 +688,7 @@
         captions: content.captions,
         heading: content.heading,
         contentURL: content.contentURL,
+        thumbnailURL: content.thumbnailURL,
         likeCount: content.likeCount,
         CommentCount: content.CommentCount,
         contentType: content.contentType,
@@ -803,7 +828,7 @@
 
       // Fetch the required slice of content already sorted
       const content = await Content.find(baseQuery)
-        .select('username postdate heading hashtags relatedTopics captions contentURL likes comments contentType smeVerify viewCount')
+        .select('username postdate heading hashtags relatedTopics captions contentURL thumbnailURL likes comments contentType smeVerify viewCount')
         .populate('userId', 'profilePicture username isTestUser')
         .sort({ postdate: -1 }) // Sorting globally
         .skip(skip)

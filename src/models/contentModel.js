@@ -13,6 +13,7 @@ const contentSchema = new mongoose.Schema({
   },
   hashtags: [String],
   contentURL: String,
+  thumbnailURL: String,
   heading: String,
   verify: {
     type: String,
