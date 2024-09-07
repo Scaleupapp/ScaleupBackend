@@ -3,6 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const quizController = require('../controllers/quizController');
+const razorpayController = require('../controllers/razorpayController'); 
 
 // Route to create a quiz
 router.post('/create', quizController.createQuiz);
@@ -24,5 +25,12 @@ router.post('/start', quizController.startQuiz);
 router.post('/submit-answer', quizController.submitAnswer);
 // End the quiz and calculate results (automated process)
 router.post('/end-quiz', quizController.endQuizAndCalculateResults);
+
+// Create a Razorpay order for quiz payment
+router.post('/create-order', razorpayController.createOrder);
+// Handle Razorpay webhook for payment capture
+router.post('/razorpay-webhook', razorpayController.handleWebhook);
+
+
 
 module.exports = router;

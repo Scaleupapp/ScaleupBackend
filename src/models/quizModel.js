@@ -27,9 +27,9 @@ const quizSchema = new mongoose.Schema({
   prizePool: { type: Number, default: 0 },
   commissionPercentage: { type: Number, default: 10 }, // Example: 10% commission
   prizeDistribution: {
-    firstPlace: { type: Number, default: 0 },
-    secondPlace: { type: Number, default: 0 },
-    thirdPlace: { type: Number, default: 0 },
+    firstPlace: { type: Number, default: 50 }, // Percentage for 1st place
+    secondPlace: { type: Number, default: 30 }, // Percentage for 2nd place
+    thirdPlace: { type: Number, default: 20 }, // Percentage for 3rd place
   },
   winners: {
     first: {

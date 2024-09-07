@@ -42,7 +42,7 @@ exports.generateQuestions = async (topic, difficulty, numQuestions = 15) => {
     console.log('Prompt being sent to ChatGPT:', prompt);
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo-16k',
+      model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 4090,
     });
@@ -71,110 +71,130 @@ exports.generateQuestions = async (topic, difficulty, numQuestions = 15) => {
 };
   
 exports.createQuiz = async (req, res) => {
-    try {
-      // Verify the user's identity using the JWT token
-      const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET); // Replace with your actual secret key
-  
-      // Get the user's ID from the decoded token
-      const userId = decoded.userId;
-  
-      // Find the user by ID in the database
-      const user = await User.findById(userId);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-  
-      // Check if the user is an admin
-      if (!user.isAdminUser) {
-        return res.status(403).json({ message: 'Access denied. Only admins can create quizzes.' });
-      }
-  
-      const { topic, difficulty, isPaid, entryFee, startTime, endTime, commissionPercentage } = req.body;
-  
-      // Generate questions using ChatGPT API
-      const questions = await exports.generateQuestions(topic, difficulty,15);
-  
-      // Calculate prize pool (optional, for paid quizzes)
-      let prizePool = 0;
-      if (isPaid) {
-        prizePool = (entryFee * 100) / (100 + commissionPercentage); // Example calculation
-      }
-  
-      // Create a new Quiz object
-      const newQuiz = new Quiz({
-        topic,
-        difficulty,
-        questions,
-        isPaid,
-        entryFee,
-        startTime: new Date(startTime),
-        endTime: new Date(endTime),
-        prizePool,
-        commissionPercentage,
-      });
-  
-      // Save the Quiz object to the database
-      await newQuiz.save();
-  
-      res.status(201).json({ message: 'Quiz created successfully', quiz: newQuiz });
-    } catch (error) {
-      // Capture the exception in Sentry
-      Sentry.captureException(error);
-      console.error('Error creating quiz:', error);
-      res.status(500).json({ error: 'Internal server error' });
+  try {
+    // Verify the user's identity using the JWT token
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET); // Replace with your actual secret key
+
+    const userId = decoded.userId;
+
+    // Find the user by ID in the database
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
     }
-  };
+
+    // Check if the user is an admin
+    if (!user.isAdminUser) {
+      return res.status(403).json({ message: 'Access denied. Only admins can create quizzes.' });
+    }
+
+    const { topic, difficulty, isPaid, entryFee, startTime, endTime, commissionPercentage = 10, prizeDistribution = {} } = req.body;
+
+    // Set default prize distribution percentages if not provided
+    const defaultPrizeDistribution = {
+      firstPlace: prizeDistribution.firstPlace || 50,
+      secondPlace: prizeDistribution.secondPlace || 30,
+      thirdPlace: prizeDistribution.thirdPlace || 20,
+    };
+
+    // Validate that the total prize distribution percentages equal 100%
+    const totalPercentage = defaultPrizeDistribution.firstPlace + defaultPrizeDistribution.secondPlace + defaultPrizeDistribution.thirdPlace;
+    if (totalPercentage !== 100) {
+      return res.status(400).json({ message: 'The total prize distribution percentages must equal 100%' });
+    }
+
+    // Generate questions using ChatGPT API
+    const questions = await exports.generateQuestions(topic, difficulty, 15);
+
+    // Create a new Quiz object
+    const newQuiz = new Quiz({
+      topic,
+      difficulty,
+      questions,
+      isPaid,
+      entryFee,
+      startTime: new Date(startTime),
+      endTime: new Date(endTime),
+      commissionPercentage,
+      prizeDistribution: defaultPrizeDistribution,
+    });
+
+    // Save the Quiz object to the database
+    await newQuiz.save();
+
+    res.status(201).json({ message: 'Quiz created successfully', quiz: newQuiz });
+  } catch (error) {
+    // Capture the exception in Sentry
+    Sentry.captureException(error);
+    console.error('Error creating quiz:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 
 exports.editQuiz = async (req, res) => {
-    try {
-      // Verify the user's identity using the JWT token
-      const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET); // Replace with your actual secret key
-  
-      // Get the user's ID from the decoded token
-      const userId = decoded.userId;
-  
-      // Find the user by ID in the database
-      const user = await User.findById(userId);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-  
-      // Check if the user is an admin
-      if (!user.isAdminUser) {
-        return res.status(403).json({ message: 'Access denied. Only admins can edit quizzes.' });
-      }
-  
-      const { quizId, topic, difficulty, isPaid, entryFee, startTime, endTime, commissionPercentage, quizTopics } = req.body;
-  
-      // Find the quiz by ID
-      const quiz = await Quiz.findById(quizId);
-      if (!quiz) {
-        return res.status(404).json({ message: 'Quiz not found' });
-      }
-  
-      // Update the quiz fields
-      quiz.topic = topic || quiz.topic;
-      quiz.difficulty = difficulty || quiz.difficulty;
-      quiz.isPaid = isPaid !== undefined ? isPaid : quiz.isPaid;
-      quiz.entryFee = entryFee !== undefined ? entryFee : quiz.entryFee;
-      quiz.startTime = startTime ? new Date(startTime) : quiz.startTime;
-      quiz.endTime = endTime ? new Date(endTime) : quiz.endTime;
-      quiz.commissionPercentage = commissionPercentage !== undefined ? commissionPercentage : quiz.commissionPercentage;
-      quiz.quizTopics = quizTopics && quizTopics.length ? quizTopics : quiz.quizTopics; // Allow updating multiple topics
-  
-      // Save the updated quiz to the database
-      await quiz.save();
-  
-      res.status(200).json({ message: 'Quiz updated successfully', quiz });
-    } catch (error) {
-      // Capture the exception in Sentry
-      Sentry.captureException(error);
-      console.error('Error editing quiz:', error);
-      res.status(500).json({ error: 'Internal server error' });
+  try {
+    // Verify the user's identity using the JWT token
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET); // Replace with your actual secret key
+
+    const userId = decoded.userId;
+
+    // Find the user by ID in the database
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
     }
-  };
+
+    // Check if the user is an admin
+    if (!user.isAdminUser) {
+      return res.status(403).json({ message: 'Access denied. Only admins can edit quizzes.' });
+    }
+
+    const { quizId, topic, difficulty, isPaid, entryFee, startTime, endTime, commissionPercentage, prizeDistribution = {} } = req.body;
+
+    // Find the quiz by ID
+    const quiz = await Quiz.findById(quizId);
+    if (!quiz) {
+      return res.status(404).json({ message: 'Quiz not found' });
+    }
+
+    // Set default prize distribution percentages if not provided
+    const defaultPrizeDistribution = {
+      firstPlace: prizeDistribution.firstPlace || quiz.prizeDistribution.firstPlace,
+      secondPlace: prizeDistribution.secondPlace || quiz.prizeDistribution.secondPlace,
+      thirdPlace: prizeDistribution.thirdPlace || quiz.prizeDistribution.thirdPlace,
+    };
+
+    // Validate that the total prize distribution percentages equal 100%
+    const totalPercentage = defaultPrizeDistribution.firstPlace + defaultPrizeDistribution.secondPlace + defaultPrizeDistribution.thirdPlace;
+    if (totalPercentage !== 100) {
+      return res.status(400).json({ message: 'The total prize distribution percentages must equal 100%' });
+    }
+
+    // Update the quiz fields
+    quiz.topic = topic || quiz.topic;
+    quiz.difficulty = difficulty || quiz.difficulty;
+    quiz.isPaid = isPaid !== undefined ? isPaid : quiz.isPaid;
+    quiz.entryFee = entryFee !== undefined ? entryFee : quiz.entryFee;
+    quiz.startTime = startTime ? new Date(startTime) : quiz.startTime;
+    quiz.endTime = endTime ? new Date(endTime) : quiz.endTime;
+    quiz.commissionPercentage = commissionPercentage !== undefined ? commissionPercentage : quiz.commissionPercentage;
+    quiz.prizeDistribution = defaultPrizeDistribution;
+
+    // Save the updated quiz to the database
+    await quiz.save();
+
+    res.status(200).json({ message: 'Quiz updated successfully', quiz });
+  } catch (error) {
+    // Capture the exception in Sentry
+    Sentry.captureException(error);
+    console.error('Error editing quiz:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 
 exports.listAllQuizzes = async (req, res) => {
     try {
@@ -392,14 +412,32 @@ exports.startQuiz = async (req, res) => {
       return res.status(400).json({ message: 'Cannot start the quiz before the official start time' });
     }
 
+    // Calculate the prize pool based on the number of participants and entry fee
+    const totalParticipants = quiz.participants.length;
+    const totalEntryFees = totalParticipants * quiz.entryFee;
+    const prizePool = totalEntryFees * (1 - quiz.commissionPercentage / 100);
+
+    // Calculate prize amounts based on the distribution percentages
+    const firstPlaceAmount = (prizePool * quiz.prizeDistribution.firstPlace) / 100;
+    const secondPlaceAmount = (prizePool * quiz.prizeDistribution.secondPlace) / 100;
+    const thirdPlaceAmount = (prizePool * quiz.prizeDistribution.thirdPlace) / 100;
+
+    // Update the quiz with the calculated prize pool and amounts
+    quiz.prizePool = prizePool;
+    quiz.prizeDistribution = {
+      firstPlace: firstPlaceAmount,
+      secondPlace: secondPlaceAmount,
+      thirdPlace: thirdPlaceAmount,
+    };
+
     // Notify participants that the quiz is starting in two minutes
     if (!quiz.startNotificationSent) {
       for (const participant of quiz.participants) {
         await createNotification(
-          participant.userId, 
-          null, 
-          'quiz_start', 
-          `Quiz "${quiz.topic}" is about to start in 2 minutes. Prepare yourself!`, 
+          participant.userId,
+          null,
+          'quiz_start',
+          `Quiz "${quiz.topic}" is about to start in 2 minutes. Prepare yourself!`,
           `/quiz/initiate-room/${quiz._id}`
         );
       }
@@ -414,18 +452,17 @@ exports.startQuiz = async (req, res) => {
       // Record the exact start time
       quiz.hasStarted = true;
       quiz.actualStartTime = new Date(); // Save the exact start time
-      quiz.endTime = new Date(quiz.actualStartTime.getTime() + 30 * 60 * 1000); // Set the quiz to end 5 minutes after the start time
+      quiz.endTime = new Date(quiz.actualStartTime.getTime() + 30 * 60 * 1000); // Set the quiz to end 30 minutes after the start time
 
       await quiz.save();
 
-      // Automatically end the quiz after 5 minutes
+      // Automatically end the quiz after the duration
       setTimeout(async () => {
         quiz.hasEnded = true;
         await quiz.save();
         console.log(`Quiz "${quiz.topic}" has ended.`);
-        await exports.endQuizAndCalculateResults(quiz._id); // <-- Use `exports` directly
+        await exports.endQuizAndCalculateResults(quiz._id);
       }, 30 * 60 * 1000);
-
     }, 2 * 60 * 1000);
 
     res.status(200).json({ message: 'Quiz will start in 2 minutes' });
@@ -435,7 +472,6 @@ exports.startQuiz = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
-
 
 exports.submitAnswer = async (req, res) => {
   try {
