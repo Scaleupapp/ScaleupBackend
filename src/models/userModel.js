@@ -1,5 +1,7 @@
 // User Model (userModel.js)
 const mongoose = require('mongoose');
+const cryptoJS = require('crypto-js');
+require('dotenv').config();
 const { Schema } = mongoose;
 
 const innerCircleRequestSchema = new Schema({
@@ -57,7 +59,25 @@ const userSchema = new mongoose.Schema({
   totalPoints: { type: Number, default: 0 },
   level: { type: String, default: 'Beginner' },
   quizParticipation: [quizParticipationSchema],
+  bankDetails: {
+    accountNumber: { type: String, required: false },
+    ifscCode: { type: String, required: false },
+    accountName: { type: String, required: false },
+  },
+  panNumber: { type: String, required: false },
+  aadhaarNumber: { type: String, required: false },
 }, { collection: 'Users' });
+
+// Method to encrypt sensitive data before saving to the database
+userSchema.methods.encryptField = function (field) {
+  return cryptoJS.AES.encrypt(field, process.env.ENCRYPTION_KEY).toString();
+};
+
+// Method to decrypt sensitive data when needed
+userSchema.methods.decryptField = function (encryptedField) {
+  const bytes = cryptoJS.AES.decrypt(encryptedField, process.env.ENCRYPTION_KEY);
+  return bytes.toString(cryptoJS.enc.Utf8);
+};
 
 const User = mongoose.model('User', userSchema);
 

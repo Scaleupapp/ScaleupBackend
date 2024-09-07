@@ -84,5 +84,10 @@ router.get('/user-analytics', analyticsController.getUserAnalytics);
 //udpate contact visibility
 router.post('/update-contact-visibility', settingsController.updateContactVisibility);
 
+// Route to save user KYC details (Bank, PAN, Aadhaar)
+router.post('/kyc/save', userController.saveUserKycDetails);
+
+// Route to get user KYC details
+router.get('/kyc/details', userController.getUserKycDetails);
 
 module.exports = router;

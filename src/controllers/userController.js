@@ -355,6 +355,74 @@ const unblockUser = async (req, res) => {
   }
 };
 
+const saveUserKycDetails = async (req, res) => {
+  try {
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    const { accountNumber, ifscCode, accountName, panNumber, aadhaarNumber } = req.body;
+
+    // Find the user in the database
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Encrypt the data
+    const encryptedAccountNumber = user.encryptField(accountNumber);
+    const encryptedIfscCode = user.encryptField(ifscCode);
+    const encryptedAccountName = user.encryptField(accountName);
+    const encryptedPanNumber = user.encryptField(panNumber);
+    const encryptedAadhaarNumber = user.encryptField(aadhaarNumber);
+
+    // Save encrypted data in the database
+    user.bankDetails.accountNumber = encryptedAccountNumber;
+    user.bankDetails.ifscCode = encryptedIfscCode;
+    user.bankDetails.accountName = encryptedAccountName;
+    user.panNumber = encryptedPanNumber;
+    user.aadhaarNumber = encryptedAadhaarNumber;
+
+    await user.save();
+
+    res.status(200).json({ message: 'KYC details saved successfully' });
+  } catch (error) {
+    console.error('Error saving KYC details:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// To fetch and decrypt KYC details (when needed)
+const getUserKycDetails = async (req, res) => {
+  try {
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Decrypt the fields before sending them
+    const decryptedAccountNumber = user.decryptField(user.bankDetails.accountNumber);
+    const decryptedIfscCode = user.decryptField(user.bankDetails.ifscCode);
+    const decryptedAccountName = user.decryptField(user.bankDetails.accountName);
+    const decryptedPanNumber = user.decryptField(user.panNumber);
+    const decryptedAadhaarNumber = user.decryptField(user.aadhaarNumber);
+
+    res.status(200).json({
+      accountNumber: decryptedAccountNumber,
+      ifscCode: decryptedIfscCode,
+      accountName: decryptedAccountName,
+      panNumber: decryptedPanNumber,
+      aadhaarNumber: decryptedAadhaarNumber,
+    });
+  } catch (error) {
+    console.error('Error fetching KYC details:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 
 module.exports = {
   updateProfile,
@@ -365,4 +433,6 @@ module.exports = {
   blockUser,
   unblockUser,
   getBlockedUsers,
+  saveUserKycDetails,
+  getUserKycDetails
 };
