@@ -117,7 +117,7 @@ exports.handleWebhook = async (req, res) => {
 
       // Retrieve quizId and userId from the transaction (ensure these were saved during order creation)
       const { quizId, userId } = transaction;
-      console.log(quizId);
+     // console.log(quizId);
       // Add the user as a participant in the quiz, if not already added
       const quiz = await Quiz.findById(quizId);
       if (!quiz) {
@@ -132,7 +132,7 @@ exports.handleWebhook = async (req, res) => {
 
       // Add the user as a participant in the quiz
       quiz.participants.push({ userId, hasPaid: true, hasJoined: false });
-      quiz.prizePool += quiz.entryFee;
+    //  quiz.prizePool += quiz.entryFee;
       await quiz.save();
 
       res.status(200).json({ message: 'Payment captured and user added to the quiz successfully' });

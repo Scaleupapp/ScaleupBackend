@@ -415,7 +415,10 @@ exports.startQuiz = async (req, res) => {
     // Calculate the prize pool based on the number of participants and entry fee
     const totalParticipants = quiz.participants.length;
     const totalEntryFees = totalParticipants * quiz.entryFee;
-    const prizePool = totalEntryFees * (1 - quiz.commissionPercentage / 100);
+    // Calculate the commission and final prize pool
+    const commission = totalEntryFees * (quiz.commissionPercentage / 100); // Commission amount
+    const prizePool = totalEntryFees - commission; // Final prize pool after deducting commission
+
 
     // Calculate prize amounts based on the distribution percentages
     const firstPlaceAmount = (prizePool * quiz.prizeDistribution.firstPlace) / 100;
