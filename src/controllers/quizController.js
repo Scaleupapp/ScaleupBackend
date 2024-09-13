@@ -14,6 +14,11 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY, // Ensure your API key is stored securely
 });
 
+let io;
+exports.setSocketIo = (socketIoInstance) => {
+  io = socketIoInstance;
+};
+
 exports.generateQuestions = async (topic, difficulty, numQuestions = 15) => {
   try {
     const prompt = `
@@ -197,67 +202,97 @@ exports.editQuiz = async (req, res) => {
 
 
 exports.listAllQuizzes = async (req, res) => {
-    try {
-        const token = req.headers.authorization.split(' ')[1];
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const userId = decoded.userId;
+  try {
+      // Extract token from the Authorization header
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const userId = decoded.userId;
 
-        const page = parseInt(req.query.page) || 1;
-        const pageSize = parseInt(req.query.pageSize) || 10;
-        const skip = (page - 1) * pageSize;
+      // Pagination logic
+      const page = parseInt(req.query.page) || 1;
+      const pageSize = parseInt(req.query.pageSize) || 10;
+      const skip = (page - 1) * pageSize;
 
-        const currentTime = new Date();
+      const currentTime = new Date();
 
-        const quizzes = await Quiz.find({
-            creator: { $ne: userId },
-            startTime: { $gt: currentTime } // Filter quizzes with startTime in the future
-        })
-        .skip(skip)
-        .limit(pageSize)
-        .sort({ createdAt: -1 });
+      // Fetch quizzes that are starting in the future and not created by the current user
+      const quizzes = await Quiz.find({
+          creator: { $ne: userId },
+          startTime: { $gt: currentTime }
+      })
+      .skip(skip)
+      .limit(pageSize)
+      .sort({ createdAt: -1 });
 
-        const totalQuizzes = await Quiz.countDocuments({
-            creator: { $ne: userId },
-            startTime: { $gt: currentTime } // Count quizzes with startTime in the future
-        });
+      // Check if the user is already registered for each quiz
+      const updatedQuizzes = quizzes.map(quiz => {
+          const isRegistered = quiz.participants.some(participant => participant.userId.toString() === userId);
+          return {
+              ...quiz.toObject(),
+              isRegistered // Add this field to indicate if the user is registered
+          };
+      });
 
-        res.status(200).json({
-            quizzes,
-            pagination: {
-                totalQuizzes,
-                currentPage: page,
-                totalPages: Math.ceil(totalQuizzes / pageSize),
-            }
-        });
-    } catch (error) {
-        Sentry.captureException(error);
-        console.error('Error listing quizzes:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
+      // Count total number of future quizzes (for pagination)
+      const totalQuizzes = await Quiz.countDocuments({
+          creator: { $ne: userId },
+          startTime: { $gt: currentTime }
+      });
+
+      // Respond with the quiz data and pagination information
+      res.status(200).json({
+          quizzes: updatedQuizzes,
+          pagination: {
+              totalQuizzes,
+              currentPage: page,
+              totalPages: Math.ceil(totalQuizzes / pageSize),
+          }
+      });
+  } catch (error) {
+      // Capture the error in Sentry for tracking
+      Sentry.captureException(error);
+      console.error('Error listing quizzes:', error);
+      res.status(500).json({ error: 'Internal server error' });
+  }
 };
 
 exports.searchQuizzes = async (req, res) => {
   try {
+    // Extract token from the Authorization header
     const token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const userId = decoded.userId;
 
+    // Get the search query from the request
     const { query } = req.query;
     if (!query) {
       return res.status(400).json({ error: 'Search query is required' });
     }
 
+    // Create a case-insensitive regular expression to search for the quiz topic
     const regex = new RegExp(query, 'i');
     const currentTime = new Date();
 
+    // Find quizzes where the topic matches the search query, and start time is in the future
     const quizzes = await Quiz.find({
       topic: { $regex: regex },
-      creator: { $ne: userId },
-      startTime: { $gt: currentTime } // Filter quizzes with startTime in the future
+      creator: { $ne: userId }, // Exclude quizzes created by the user
+      startTime: { $gt: currentTime } // Filter quizzes with future start times
     }).sort({ createdAt: -1 });
 
-    res.status(200).json({ quizzes });
+    // Check if the user is already registered for each quiz
+    const updatedQuizzes = quizzes.map(quiz => {
+      const isRegistered = quiz.participants.some(participant => participant.userId.toString() === userId);
+      return {
+        ...quiz.toObject(),
+        isRegistered // Add this field to indicate if the user is registered
+      };
+    });
+
+    // Send the updated quizzes as the response
+    res.status(200).json({ quizzes: updatedQuizzes });
   } catch (error) {
+    // Capture the error in Sentry for tracking
     Sentry.captureException(error);
     console.error('Error searching quizzes:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -266,30 +301,45 @@ exports.searchQuizzes = async (req, res) => {
 
 exports.recommendQuizzes = async (req, res) => {
   try {
-      const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const userId = decoded.userId;
+    // Extract token from the Authorization header
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
 
-      const user = await User.findById(userId);
-      if (!user) {
-          return res.status(404).json({ message: 'User not found' });
-      }
+    // Find the user by their ID
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
 
-      const userInterests = user.bio.bioInterests.map(interest => new RegExp(interest, 'i'));
-      const currentTime = new Date();
+    // Map user interests to regular expressions for case-insensitive matching
+    const userInterests = user.bio.bioInterests.map(interest => new RegExp(interest, 'i'));
+    const currentTime = new Date();
 
-      const recommendedQuizzes = await Quiz.find({
-        topic: { $in: userInterests },
-        startTime: { $gt: currentTime } // Filter quizzes with startTime in the future
-      }).sort({ createdAt: -1 });
+    // Find recommended quizzes based on user interests
+    const recommendedQuizzes = await Quiz.find({
+      topic: { $in: userInterests },
+      startTime: { $gt: currentTime } // Filter quizzes with startTime in the future
+    }).sort({ createdAt: -1 });
 
-      res.status(200).json({ recommendedQuizzes });
+    // Check if the user is already registered for each recommended quiz
+    const updatedQuizzes = recommendedQuizzes.map(quiz => {
+      const isRegistered = quiz.participants.some(participant => participant.userId.toString() === userId);
+      return {
+        ...quiz.toObject(),
+        isRegistered // Add this field to indicate if the user is registered
+      };
+    });
+
+    // Send the updated recommended quizzes as the response
+    res.status(200).json({ recommendedQuizzes: updatedQuizzes });
   } catch (error) {
-      Sentry.captureException(error);
-      console.error('Error recommending quizzes:', error);
-      res.status(500).json({ error: 'Internal server error' });
+    // Capture the error in Sentry for tracking
+    Sentry.captureException(error);
+    console.error('Error recommending quizzes:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
-};  
+}; 
 
 exports.joinQuiz = async (req, res) => {
   try {
@@ -346,6 +396,7 @@ exports.joinQuiz = async (req, res) => {
     await user.save();
 
     res.status(200).json({ message: 'Successfully joined the quiz' });
+    
   } catch (error) {
     Sentry.captureException(error);
     console.error('Error joining quiz:', error);
@@ -405,12 +456,12 @@ exports.startQuiz = async (req, res) => {
       return res.status(400).json({ message: 'Quiz has already started' });
     }
 
-    const currentTime = new Date();
+    //const currentTime = new Date();
 
     // Check if the quiz is being started before the official start time
-    if (currentTime < quiz.startTime) {
-      return res.status(400).json({ message: 'Cannot start the quiz before the official start time' });
-    }
+   // if (currentTime < quiz.startTime) {
+     // return res.status(400).json({ message: 'Cannot start the quiz before the official start time' });
+   // }
 
     // Calculate the prize pool based on the number of participants and entry fee
     const totalParticipants = quiz.participants.length;
@@ -447,6 +498,9 @@ exports.startQuiz = async (req, res) => {
       quiz.startNotificationSent = true;
     }
 
+    console.log(`Emitting 'quizStarted' event to room quiz_${quizId}`);
+      io.to(`quiz_${quizId}`).emit('quizStarted', { quizId, startTime: quiz.actualStartTime });
+   
     // Save the quiz state to indicate the notification was sent
     await quiz.save();
 
@@ -456,8 +510,9 @@ exports.startQuiz = async (req, res) => {
       quiz.hasStarted = true;
       quiz.actualStartTime = new Date(); // Save the exact start time
       quiz.endTime = new Date(quiz.actualStartTime.getTime() + 30 * 60 * 1000); // Set the quiz to end 30 minutes after the start time
-
+      
       await quiz.save();
+      
 
       // Automatically end the quiz after the duration
       setTimeout(async () => {

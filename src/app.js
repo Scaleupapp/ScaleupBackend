@@ -18,6 +18,7 @@ const conversationRoute = require("./routes/conversationRoute");
 const studyGroupController = require("./controllers/studyGroupController");
 const chatController = require("./controllers/chatController");
 const webinarController = require("./controllers/webinarController");
+const quizController = require("./controllers/quizController");
 const webinarRoutes = require("./routes/webinarRoutes");
 
 require("dotenv").config();
@@ -53,6 +54,10 @@ Sentry.init({
   profilesSampleRate: 1.0,
 });
 
+// Pass the Socket.IO instance to the quiz controller
+quizController.setSocketIo(io);
+
+
 // Middleware setup
 app.use(bodyParser.json());
 app.use(cors());
@@ -73,6 +78,27 @@ mongoose
 
 // Multer setup for file uploads
 const upload = multer({ storage: multer.memoryStorage() });
+
+// Socket.IO connection handling
+io.on("connection", (socket) => {
+  console.log("New client connected for Quiz");
+
+  // Join a quiz room when a user registers
+  socket.on("joinRoom", ({ quizId }) => {
+    socket.join(`quiz_${quizId}`);
+    console.log(`User joined quiz room: quiz_${quizId}`);
+  });
+
+  // Notify everyone in the quiz room when the quiz starts
+  socket.on("quizStarted", ({ quizId }) => {
+    io.to(`quiz_${quizId}`).emit("quizStarted", { quizId });
+    console.log(`Quiz started for quiz room: quiz_${quizId}`);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("Client disconnected for Quiz");
+  });
+});
 
 // Routes setup
 app.use("/api/auth", authRoute);
