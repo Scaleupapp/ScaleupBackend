@@ -66,6 +66,9 @@ const userSchema = new mongoose.Schema({
   },
   panNumber: { type: String, required: false },
   aadhaarNumber: { type: String, required: false },
+  amazonPayLinked: { type: Boolean, default: false }, // To check if Amazon Pay is linked
+  amazonPayUserId: { type: String, required: false }, // Store Amazon Pay's user ID after linking
+  amazonPayAccessToken: { type: String, required: false }, // Store the OAuth token
 }, { collection: 'Users' });
 
 // Method to encrypt sensitive data before saving to the database

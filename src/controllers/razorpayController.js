@@ -13,64 +13,78 @@ const razorpayInstance = new Razorpay({
 });
 
 
-// Create Razorpay Order with User Authentication
+// Create Razorpay Order with User Authentication and KYC Check
 exports.createOrder = async (req, res) => {
-  try {
-    // Verify the user's identity using the JWT token
-    const token = req.headers.authorization.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET); // Replace with your actual secret key
-
-    // Get the user's ID from the decoded token
-    const userId = decoded.userId;
-
-    // Extract quizId and currency from request body
-    const { quizId, currency = 'INR', type = 'Quiz Entry Fee' } = req.body; // quizId from the frontend
-
-    // Find the quiz by ID to get the entry fee
-    const quiz = await Quiz.findById(quizId);
-    if (!quiz || !quiz.isPaid) {
-      return res.status(404).json({ message: 'Quiz not found or is not a paid quiz' });
+    try {
+      // Verify the user's identity using the JWT token
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET); // Replace with your actual secret key
+  
+      // Get the user's ID from the decoded token
+      const userId = decoded.userId;
+  
+      // Check if the user has submitted KYC details
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+  
+      // Check if the user has provided KYC details (PAN and Aadhaar, or Bank details)
+      if (!user.panNumber || !user.aadhaarNumber || !user.bankDetails.accountNumber || !user.bankDetails.ifscCode) {
+        return res.status(400).json({
+          message: 'You must complete your KYC (provide PAN, Aadhaar, and Bank details) before joining a paid quiz.'
+        });
+      }
+  
+      // Extract quizId and currency from request body
+      const { quizId, currency = 'INR', type = 'Quiz Entry Fee' } = req.body; // quizId from the frontend
+  
+      // Find the quiz by ID to get the entry fee
+      const quiz = await Quiz.findById(quizId);
+      if (!quiz || !quiz.isPaid) {
+        return res.status(404).json({ message: 'Quiz not found or is not a paid quiz' });
+      }
+  
+      const entryFee = quiz.entryFee;
+      const amountInPaisa = entryFee * 100; // Convert amount to paisa (Razorpay works with paisa)
+  
+      const options = {
+        amount: amountInPaisa,
+        currency,
+        receipt: `receipt_${Date.now()}`,
+      };
+  
+      // Create a Razorpay order
+      const order = await razorpayInstance.orders.create(options);
+  
+      // Save transaction details with 'created' status
+      const transaction = new Transaction({
+        userId,
+        quizId, // Store quizId in the transaction
+        transactionId: order.id,
+        orderId: order.id,
+        amount: entryFee,
+        currency: order.currency,
+        status: 'created',
+        type,
+        description: `Payment for quiz entry fee - ${quizId}`,
+      });
+  
+      await transaction.save();
+  
+      res.status(200).json({
+        orderId: order.id,
+        amount: order.amount,
+        currency: order.currency,
+        status: order.status,
+        quizId,
+      });
+    } catch (error) {
+      console.error('Error creating Razorpay order:', error);
+      res.status(500).json({ error: 'Failed to create order' });
     }
-
-    const entryFee = quiz.entryFee;
-    const amountInPaisa = entryFee * 100; // Convert amount to paisa (Razorpay works with paisa)
-
-    const options = {
-      amount: amountInPaisa,
-      currency,
-      receipt: `receipt_${Date.now()}`,
-    };
-
-    // Create a Razorpay order
-    const order = await razorpayInstance.orders.create(options);
-
-    // Save transaction details with 'created' status
-    const transaction = new Transaction({
-      userId,
-      quizId, // Store quizId in the transaction
-      transactionId: order.id,
-      orderId: order.id,
-      amount: entryFee,
-      currency: order.currency,
-      status: 'created',
-      type,
-      description: `Payment for quiz entry fee - ${quizId}`,
-    });
-
-    await transaction.save();
-
-    res.status(200).json({
-      orderId: order.id,
-      amount: order.amount,
-      currency: order.currency,
-      status: order.status,
-      quizId,
-    });
-  } catch (error) {
-    console.error('Error creating Razorpay order:', error);
-    res.status(500).json({ error: 'Failed to create order' });
-  }
-};
+  };
+  
 
 // Handle Razorpay Webhook for successful payment and add user as a participant
 exports.handleWebhook = async (req, res) => {

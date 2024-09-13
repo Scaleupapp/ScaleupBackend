@@ -355,6 +355,7 @@ const unblockUser = async (req, res) => {
   }
 };
 
+// Save User KYC Details
 const saveUserKycDetails = async (req, res) => {
   try {
     const token = req.headers.authorization.split(' ')[1];
@@ -362,6 +363,11 @@ const saveUserKycDetails = async (req, res) => {
     const userId = decoded.userId;
 
     const { accountNumber, ifscCode, accountName, panNumber, aadhaarNumber } = req.body;
+
+    // Validate input
+    if (!accountNumber || !ifscCode || !accountName || !panNumber || !aadhaarNumber) {
+      return res.status(400).json({ message: 'All fields are required' });
+    }
 
     // Find the user in the database
     const user = await User.findById(userId);
@@ -392,7 +398,7 @@ const saveUserKycDetails = async (req, res) => {
   }
 };
 
-// To fetch and decrypt KYC details (when needed)
+// Fetch User KYC Details
 const getUserKycDetails = async (req, res) => {
   try {
     const token = req.headers.authorization.split(' ')[1];

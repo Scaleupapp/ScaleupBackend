@@ -13,10 +13,12 @@ const userRoute = require("./routes/userRoute");
 const authRoute = require("./routes/authRoute");
 const contentRoute = require("./routes/contentRoutes");
 const chatRoute = require("./routes/chatRoute");
-const quizRoutes = require('./routes/quizRoutes');
+const quizRoutes = require("./routes/quizRoutes");
 const conversationRoute = require("./routes/conversationRoute");
 const studyGroupController = require("./controllers/studyGroupController");
 const chatController = require("./controllers/chatController");
+const webinarController = require("./controllers/webinarController");
+const webinarRoutes = require("./routes/webinarRoutes");
 
 require("dotenv").config();
 
@@ -24,7 +26,7 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: "*", // Allow any origin for simplicity. You can restrict this to specific origins as needed.
+    origin: "*", // Allow any origin for simplicity. Restrict as needed.
     methods: ["GET", "POST"],
   },
 });
@@ -42,7 +44,7 @@ const s3 = new aws.S3({
 
 // Initialize Sentry for error tracking
 Sentry.init({
-  dsn: "https://70a3fa133c98e18ff07f83ec9eb6e281@o4506403653222400.ingest.sentry.io/4506404787781632",
+  dsn: process.env.SENTRY_DSN, // Replace with your Sentry DSN
   integrations: [
     new Sentry.Integrations.Http({ tracing: true }),
     new Sentry.Integrations.Express({ app }),
@@ -78,9 +80,10 @@ app.use("/api/users", userRoute);
 app.use("/api/content", contentRoute);
 app.use("/api/chat", chatRoute);
 app.use("/api/conversation", conversationRoute);
-app.use('/api/quiz', quizRoutes);
+app.use("/api/quiz", quizRoutes);
+app.use("/api/webinar", webinarRoutes);
 
-// Socket.IO setup for real-time messaging
+// Socket.IO setup for real-time messaging and webinars
 io.on("connection", (socket) => {
   console.log("New client connected");
 
@@ -94,6 +97,30 @@ io.on("connection", (socket) => {
   socket.on("joinGroup", (groupId) => {
     socket.join(groupId);
     console.log(`User joined group: ${groupId}`);
+  });
+
+  // Join Waiting Room
+  socket.on("joinWaitingRoom", (webinarId) => {
+    socket.join(`waitingRoom_${webinarId}`);
+    console.log(`User joined waiting room for webinar: ${webinarId}`);
+  });
+
+  // Leave Waiting Room
+  socket.on("leaveWaitingRoom", (webinarId) => {
+    socket.leave(`waitingRoom_${webinarId}`);
+    console.log(`User left waiting room for webinar: ${webinarId}`);
+  });
+
+  // Join Webinar Room
+  socket.on("joinWebinar", (webinarId) => {
+    socket.join(`webinar_${webinarId}`);
+    console.log(`User joined webinar: ${webinarId}`);
+  });
+
+  // Leave Webinar Room
+  socket.on("leaveWebinar", (webinarId) => {
+    socket.leave(`webinar_${webinarId}`);
+    console.log(`User left webinar: ${webinarId}`);
   });
 
   // Handle sending messages (for both one-to-one and group chats)
@@ -258,7 +285,7 @@ io.on("connection", (socket) => {
 
 // Expose the Socket.IO instance to controllers
 chatController.setSocketIo(io);
-studyGroupController.setSocketIo(io);  
+studyGroupController.setSocketIo(io);
 
 // Error handling
 app.use((err, req, res, next) => {
