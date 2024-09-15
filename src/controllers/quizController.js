@@ -445,46 +445,27 @@ exports.startQuiz = async (req, res) => {
   try {
     const { quizId } = req.body;
 
-    // Find the quiz
     const quiz = await Quiz.findById(quizId);
     if (!quiz) {
       return res.status(404).json({ message: 'Quiz not found' });
     }
 
-    // Check if the quiz has already started
     if (quiz.hasStarted) {
       return res.status(400).json({ message: 'Quiz has already started' });
     }
 
-    //const currentTime = new Date();
-
-    // Check if the quiz is being started before the official start time
-   // if (currentTime < quiz.startTime) {
-     // return res.status(400).json({ message: 'Cannot start the quiz before the official start time' });
-   // }
-
-    // Calculate the prize pool based on the number of participants and entry fee
     const totalParticipants = quiz.participants.length;
     const totalEntryFees = totalParticipants * quiz.entryFee;
-    // Calculate the commission and final prize pool
-    const commission = totalEntryFees * (quiz.commissionPercentage / 100); // Commission amount
-    const prizePool = totalEntryFees - commission; // Final prize pool after deducting commission
+    const commission = totalEntryFees * (quiz.commissionPercentage / 100); 
+    const prizePool = totalEntryFees - commission; 
 
-
-    // Calculate prize amounts based on the distribution percentages
-    const firstPlaceAmount = (prizePool * quiz.prizeDistribution.firstPlace) / 100;
-    const secondPlaceAmount = (prizePool * quiz.prizeDistribution.secondPlace) / 100;
-    const thirdPlaceAmount = (prizePool * quiz.prizeDistribution.thirdPlace) / 100;
-
-    // Update the quiz with the calculated prize pool and amounts
     quiz.prizePool = prizePool;
     quiz.prizeDistribution = {
-      firstPlace: firstPlaceAmount,
-      secondPlace: secondPlaceAmount,
-      thirdPlace: thirdPlaceAmount,
+      firstPlace: (prizePool * quiz.prizeDistribution.firstPlace) / 100,
+      secondPlace: (prizePool * quiz.prizeDistribution.secondPlace) / 100,
+      thirdPlace: (prizePool * quiz.prizeDistribution.thirdPlace) / 100,
     };
 
-    // Notify participants that the quiz is starting in two minutes
     if (!quiz.startNotificationSent) {
       for (const participant of quiz.participants) {
         await createNotification(
@@ -498,30 +479,44 @@ exports.startQuiz = async (req, res) => {
       quiz.startNotificationSent = true;
     }
 
-    console.log(`Emitting 'quizStarted' event to room quiz_${quizId}`);
-      io.to(`quiz_${quizId}`).emit('quizStarted', { quizId, startTime: quiz.actualStartTime });
+    
+    
+    // Emit the 'quizStarted' event to all participants in the room with the **actual start time** (2 minutes later)
+    const actualStartTime = new Date(new Date().getTime() + 2 * 60 * 1000);  // The actual start time (2 minutes from now)
+    io.in(`quiz_${quizId}`).emit('quizStarted', { quizId, startTime: actualStartTime });
    
-    // Save the quiz state to indicate the notification was sent
+    //console.log('quiz start time emitted', $(startTime));
+    console.log(`Quiz will officially start in 2 minutes at ${actualStartTime}`);
+
     await quiz.save();
 
-    // Wait for two minutes before officially starting the quiz
-    setTimeout(async () => {
-      // Record the exact start time
-      quiz.hasStarted = true;
-      quiz.actualStartTime = new Date(); // Save the exact start time
-      quiz.endTime = new Date(quiz.actualStartTime.getTime() + 30 * 60 * 1000); // Set the quiz to end 30 minutes after the start time
-      
-      await quiz.save();
-      
+    io.in(`quiz_${quizId}`).emit('quizJoined', { quizId, startTime: actualStartTime });
 
-      // Automatically end the quiz after the duration
+    // Wait for 2 minutes before officially starting the quiz
+    setTimeout(async () => {
+      quiz.hasStarted = true;
+      quiz.actualStartTime = new Date(); // The exact time the quiz starts
+      quiz.endTime = new Date(quiz.actualStartTime.getTime() + 30 * 60 * 1000); // Set quiz to end 30 minutes after the start time
+
+      await quiz.save();
+      console.log(`Quiz "${quiz.topic}" has officially started at ${quiz.actualStartTime}`);
+      
+      // Emit the 'quizStarted' event
+      io.in(`quiz_${quizId}`).emit('quizReady', { quizId, startTime: actualStartTime });
+
+
+      // Start emitting questions at regular intervals
+      await exports.emitNextQuestion(quizId);
+
+      // Automatically end the quiz after the duration (30 minutes)
       setTimeout(async () => {
         quiz.hasEnded = true;
         await quiz.save();
         console.log(`Quiz "${quiz.topic}" has ended.`);
         await exports.endQuizAndCalculateResults(quiz._id);
-      }, 30 * 60 * 1000);
-    }, 2 * 60 * 1000);
+      }, 30 * 60 * 1000); // 30 minutes duration
+
+    }, 2 * 60 * 1000); // 2 minutes waiting time before starting the quiz
 
     res.status(200).json({ message: 'Quiz will start in 2 minutes' });
   } catch (error) {
@@ -530,6 +525,7 @@ exports.startQuiz = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
 
 exports.submitAnswer = async (req, res) => {
   try {
@@ -548,27 +544,30 @@ exports.submitAnswer = async (req, res) => {
       return res.status(404).json({ message: 'Question not found' });
     }
 
-    const correct = question.correctAnswer === selectedOption;
+    // Check if the answer is correct
+    const correct = selectedOption !== null && question.correctAnswer === selectedOption;
     const pointsAwarded = correct ? Math.max(0, 10 - timeTaken) : 0;
 
     let userQuizResult = await UserQuizResult.findOne({ quizId, userId });
     if (!userQuizResult) {
-      userQuizResult = new UserQuizResult({ quizId, userId, totalScore: 0, answers: [] });
+      userQuizResult = new UserQuizResult({ quizId, userId, totalScore: 0, answers: [], questionsAnswered: 0 });
     }
 
+    // Add the answer to the user's quiz results
     userQuizResult.answers.push({
       questionId,
-      selectedOption,
+      selectedOption, // Can be null if no answer was submitted
       isCorrect: correct,
       timeTaken,
       pointsAwarded,
     });
 
     userQuizResult.totalScore += pointsAwarded;
+    userQuizResult.questionsAnswered += 1; // Increment the number of questions answered
     await userQuizResult.save();
 
-    // Update Area of Improvement if the answer is incorrect
-    if (!correct) {
+    // Update Area of Improvement if the answer is incorrect and not null
+    if (!correct && selectedOption !== null) {
       for (const topic of question.relatedTopics) {
         await AreaOfImprovement.findOneAndUpdate(
           { userId, topic },
@@ -578,12 +577,13 @@ exports.submitAnswer = async (req, res) => {
       }
     }
 
-    // Check if all participants have completed the quiz
+    // Check if all participants have completed all questions
     const allResults = await UserQuizResult.find({ quizId });
     const allParticipants = quiz.participants.length;
-    
-    if (allResults.length === allParticipants) {
-      // Automatically end the quiz
+    const allQuestionsAnswered = allResults.every(result => result.questionsAnswered === quiz.questions.length);
+
+    if (allResults.length === allParticipants && allQuestionsAnswered) {
+      // End the quiz if all participants have answered all questions
       await exports.endQuizAndCalculateResults(quizId);
     }
 
@@ -593,6 +593,8 @@ exports.submitAnswer = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+
 
 exports.endQuizAndCalculateResults = async (quizId) => {
   try {
@@ -615,11 +617,14 @@ exports.endQuizAndCalculateResults = async (quizId) => {
       return b.totalScore - a.totalScore;
     });
 
+    // Array to store participants' rank and scores for the quiz
+    const participantsRank = [];
+
     // Assign ranks and calculate final scores for all participants
     for (let i = 0; i < userResults.length; i++) {
       const result = userResults[i];
       result.rank = i + 1;
-      
+
       // Additional points for the top 3
       if (i === 0) {
         result.additionalPoints = 100;
@@ -634,14 +639,20 @@ exports.endQuizAndCalculateResults = async (quizId) => {
       result.finalScore = result.totalScore + result.additionalPoints;
       await result.save();
 
-      // Update cumulative score in user model
+      // Update cumulative score in the user model
       const user = await User.findById(result.userId);
       user.totalPoints += result.finalScore;
 
       // Calculate and update user level based on cumulative score
       user.level = calculateUserLevel(user.totalPoints);
-      
       await user.save();
+
+      // Add participant's rank to the array
+      participantsRank.push({
+        userId: result.userId,
+        rank: result.rank,
+        finalScore: result.finalScore
+      });
 
       // Store the top 3 in the quiz model (if applicable)
       if (i === 0) {
@@ -656,13 +667,14 @@ exports.endQuizAndCalculateResults = async (quizId) => {
       }
     }
 
-    // Save the quiz model with the updated winners
-    await quiz.save();
+    // Store the participants' ranks in the quiz model
+    quiz.participantsRank = participantsRank;
 
+    // Save the quiz model with the updated winners and participants' ranks
     quiz.hasEnded = true;
     await quiz.save();
 
-    return userResults;
+    console.log('Quiz results calculated and winners updated');
   } catch (error) {
     Sentry.captureException(error);
     console.error('Error ending quiz and calculating results:', error);
@@ -670,6 +682,8 @@ exports.endQuizAndCalculateResults = async (quizId) => {
   }
 };
 
+
+// Helper function to calculate user level based on total points
 function calculateUserLevel(totalPoints) {
   if (totalPoints >= 100001) return 'Godlike';
   if (totalPoints >= 50001) return 'Immortal';
@@ -683,6 +697,88 @@ function calculateUserLevel(totalPoints) {
   return 'Beginner';
 }
 
+exports.emitNextQuestion = (quizId) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const quiz = await Quiz.findById(quizId);
+      if (!quiz) {
+        return reject(new Error('Quiz not found'));
+      }
+
+      let questionIndex = 0;
+      const questionInterval = setInterval(async () => {
+        // If there are no more questions, clear the interval and end the quiz
+        if (questionIndex >= quiz.questions.length) {
+          clearInterval(questionInterval);
+          // End the quiz and calculate results
+          await exports.endQuizAndCalculateResults(quizId);
+          io.to(`quiz_${quizId}`).emit('showLeaderboard');
+          return resolve();
+        }
+
+        // Get the current question and emit it to the quiz room
+        const question = quiz.questions[questionIndex];
+        io.to(`quiz_${quizId}`).emit('nextQuestion', {
+          quizId: quizId, // Include quizId
+          question: {
+            _id: question._id,
+            text: question.questionText, // Use questionText from your model
+            options: question.options,
+            // Note: Correct answer is not included to prevent cheating
+          }
+        });
+        
+
+        console.log(`Emitting question ${questionIndex + 1} for quiz ${quizId}`);
+        questionIndex++;
+      }, 10000); // Emit a question every 10 seconds
+    } catch (error) {
+      console.error('Error emitting next question:', error);
+      return reject(error);
+    }
+  });
+};
+
+
+exports.getQuizResults = async (req, res) => {
+  try {
+    const { quizId } = req.params;
+
+    // Find the quiz with participant ranks
+    const quiz = await Quiz.findById(quizId).populate('participantsRank.userId', 'username profilePicture'); // Populate user details
+
+    if (!quiz) {
+      return res.status(404).json({ message: 'Quiz not found' });
+    }
+
+    // Get detailed results for each participant
+    const userResults = await UserQuizResult.find({ quizId }).populate('userId', 'username profilePicture');
+
+    // Prepare results data
+    const results = userResults.map(result => {
+      const totalTimeTaken = result.answers.reduce((acc, answer) => acc + answer.timeTaken, 0);
+      const totalCorrectAnswers = result.answers.filter(answer => answer.isCorrect).length;
+
+      return {
+        userId: result.userId._id,
+        username: result.userId.username,
+        profilePicture: result.userId.profilePicture,
+        rank: result.rank,
+        finalScore: result.finalScore,
+        totalCorrectAnswers,
+        totalTimeTaken
+      };
+    });
+
+    // Sort results by rank
+    results.sort((a, b) => a.rank - b.rank);
+
+    res.status(200).json({ results });
+  } catch (error) {
+    console.error('Error fetching quiz results:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 
 
 

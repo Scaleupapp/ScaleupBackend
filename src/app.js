@@ -89,12 +89,21 @@ io.on("connection", (socket) => {
     console.log(`User joined quiz room: quiz_${quizId}`);
   });
 
+  /*
   // Notify everyone in the quiz room when the quiz starts
   socket.on("quizStarted", ({ quizId }) => {
     io.to(`quiz_${quizId}`).emit("quizStarted", { quizId });
     console.log(`Quiz started for quiz room: quiz_${quizId}`);
   });
 
+  // Listen for quiz start event
+  socket.on('startQuiz', ({ quizId }) => {
+    const startTime = new Date(); // Get the current start time or set a future start time
+    io.to(`quiz_${quizId}`).emit('quizStarted', { quizId, startTime }); // Notify all users in this quiz room
+    console.log(`Quiz started for quiz room: quiz_${quizId}, Start time: ${startTime}`);
+  });
+
+  */
   socket.on("disconnect", () => {
     console.log("Client disconnected for Quiz");
   });

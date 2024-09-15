@@ -54,7 +54,13 @@
       actualStartTime: { type: Date, default: null }, // Record the actual start time
       endTime: { type: Date, default: null }, // Set the official stop time
       hasEnded: { type: Boolean, default: false }, // Indicate if the quiz has ended
-
+      participantsRank: [
+        {
+          userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+          rank: { type: Number },
+          finalScore: { type: Number }
+        }
+      ],
     });
 
     const Quiz = mongoose.model('Quiz', quizSchema);

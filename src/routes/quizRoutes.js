@@ -31,6 +31,8 @@ router.post('/create-order', razorpayController.createOrder);
 // Handle Razorpay webhook for payment capture
 router.post('/razorpay-webhook', razorpayController.handleWebhook);
 
+// Fetch quiz results
+router.get('/quiz-results/:quizId', quizController.getQuizResults);
 
 
 module.exports = router;

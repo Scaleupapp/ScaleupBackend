@@ -20,6 +20,7 @@ const userQuizResultSchema = new mongoose.Schema({
   finalScore: { type: Number, default: 0 }, // Total score + additional points
   //cumulativeScore: { type: Number, default: 0 }, // Cumulative score across all quizzes
   createdAt: { type: Date, default: Date.now },
+  questionsAnswered: { type: Number, default: 0 },
 });
 
 const UserQuizResult = mongoose.model('UserQuizResult', userQuizResultSchema);
