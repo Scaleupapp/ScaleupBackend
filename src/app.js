@@ -27,10 +27,20 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
+    origin: 'https://main.d3dx884pkm8jl7.amplifyapp.com', // Restrict CORS to your Amplify domain
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true
+  },
+});
+/*
+const io = socketIo(server, {
+  cors: {
     origin: "*", // Allow any origin for simplicity. Restrict as needed.
     methods: ["GET", "POST"],
   },
 });
+*/
 
 const PORT = process.env.PORT || 3000;
 const mongodbUri = process.env.MONGODB_URI;
@@ -60,7 +70,16 @@ quizController.setSocketIo(io);
 
 // Middleware setup
 app.use(bodyParser.json());
+/*
 app.use(cors());
+*/
+app.use(cors({
+  origin: 'https://main.d3dx884pkm8jl7.amplifyapp.com', // Restrict to your Amplify domain
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+app.options('*', cors());
 app.use(Sentry.Handlers.errorHandler());
 
 // MongoDB Connection
