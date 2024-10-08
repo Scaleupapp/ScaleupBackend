@@ -20,6 +20,7 @@ const chatController = require("./controllers/chatController");
 const webinarController = require("./controllers/webinarController");
 const quizController = require("./controllers/quizController");
 const webinarRoutes = require("./routes/webinarRoutes");
+const healthcheckRoutes = require("./routes/healthcheckRoute");
 
 require("dotenv").config();
 
@@ -136,6 +137,7 @@ app.use("/api/chat", chatRoute);
 app.use("/api/conversation", conversationRoute);
 app.use("/api/quiz", quizRoutes);
 app.use("/api/webinar", webinarRoutes);
+app.use("/api/health", healthcheckRoutes);
 
 // Socket.IO setup for real-time messaging and webinars
 io.on("connection", (socket) => {
