@@ -5,6 +5,7 @@ const Sentry = require('@sentry/node');
 const { createNotification } = require('./contentController');
 const User = require('../models/userModel');
 require('dotenv').config();
+const logActivity = require('../utils/activityLogger');
 
 let io;
  const setSocketIo = (socketIoInstance) => {
@@ -21,71 +22,75 @@ const s3 = new aws.S3({
 
 // Create a new study group with profile picture upload
 const createStudyGroup = async (req, res) => {
-    try {
-      // Verify the user's identity using the JWT token
-      const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, jwtSecret);
-  
-      // Parse and validate input data
-      let { name, description, members = [], admins = [], topics, privacy } = req.body;
-  
-      // Ensure members and admins are arrays
-      if (typeof members === 'string') {
-        members = JSON.parse(members);
-      }
-      if (typeof admins === 'string') {
-        admins = JSON.parse(admins);
-      }
-  
-      // Handle topics to ensure it's an array
-      if (typeof topics === 'string') {
-        topics = JSON.parse(topics);
-      } else if (!Array.isArray(topics)) {
-        topics = [topics]; // Ensure topics is an array
-      }
-  
-      // Add the current user (who is creating the group) as an admin
-      if (!admins.includes(decoded.userId)) {
-        admins.push(decoded.userId);
-      }
-  
-      // Ensure the current user is also added as a member
-      if (!members.includes(decoded.userId)) {
-        members.push(decoded.userId);
-      }
-  
-      const newGroup = new StudyGroup({
-        name,
-        description,
-        members,
-        admins,
-        topics,
-        privacy,
-        createdDate: new Date(),
-      });
-  
-      // Handle profile picture upload if provided
-      if (req.file) {
-        const params = {
-          Bucket: 'scaleupbucket',
-          Key: `study-groups/${newGroup._id}/profile-picture.jpg`,
-          Body: req.file.buffer,
-          ACL: 'public-read', // Make uploaded file publicly accessible
-          ContentType: req.file.mimetype,
-        };
-  
-        const uploadResult = await s3.upload(params).promise();
-        newGroup.profilePicture = uploadResult.Location;
-      }
-  
-      const savedGroup = await newGroup.save();
-      res.status(201).json(savedGroup);
-    } catch (error) {
-      Sentry.captureException(error);
-      console.error('Error creating study group:', error);
-      res.status(500).json({ message: 'Internal server error' });
+  try {
+    // Verify the user's identity using the JWT token
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret);
+
+    // Parse and validate input data
+    let { name, description, members = [], admins = [], topics, privacy } = req.body;
+
+    // Ensure members and admins are arrays
+    if (typeof members === 'string') {
+      members = JSON.parse(members);
     }
-  };
+    if (typeof admins === 'string') {
+      admins = JSON.parse(admins);
+    }
+
+    // Handle topics to ensure it's an array
+    if (typeof topics === 'string') {
+      topics = JSON.parse(topics);
+    } else if (!Array.isArray(topics)) {
+      topics = [topics]; // Ensure topics is an array
+    }
+
+    // Add the current user (who is creating the group) as an admin
+    if (!admins.includes(decoded.userId)) {
+      admins.push(decoded.userId);
+    }
+
+    // Ensure the current user is also added as a member
+    if (!members.includes(decoded.userId)) {
+      members.push(decoded.userId);
+    }
+
+    const newGroup = new StudyGroup({
+      name,
+      description,
+      members,
+      admins,
+      topics,
+      privacy,
+      createdDate: new Date(),
+    });
+
+    // Handle profile picture upload if provided
+    if (req.file) {
+      const params = {
+        Bucket: 'scaleupbucket',
+        Key: `study-groups/${newGroup._id}/profile-picture.jpg`,
+        Body: req.file.buffer,
+        ACL: 'public-read', // Make uploaded file publicly accessible
+        ContentType: req.file.mimetype,
+      };
+
+      const uploadResult = await s3.upload(params).promise();
+      newGroup.profilePicture = uploadResult.Location;
+    }
+
+    const savedGroup = await newGroup.save();
+
+    // Log activity for creating a study group
+    await logActivity(decoded.userId, 'create_study_group', `User created a new study group: ${name}`);
+
+    res.status(201).json(savedGroup);
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error creating study group:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
   
   
 // Update a study group by ID with option to edit profile picture
@@ -306,58 +311,65 @@ const updateAdminsInStudyGroup = async (req, res) => {
 };
 
 const requestToJoinStudyGroup = async (req, res) => {
-    try {
-        const token = req.headers.authorization.split(' ')[1];
-        const decoded = jwt.verify(token, jwtSecret);
-        const { groupId } = req.body;
-        const userId = decoded.userId;
-  
-        const group = await StudyGroup.findById(groupId);
-  
-        if (!group) {
-            return res.status(404).json({ message: 'Study group not found' });
-        }
-  
-        if (group.members.includes(userId)) {
-            return res.status(400).json({ message: 'You are already a member of this group.' });
-        }
-  
-        const user = await User.findById(userId); // Fetch user details
-  
-        if (!user) {
-            return res.status(404).json({ message: 'User not found.' });
-        }
-  
-        if (group.privacy === 'public') {
-            group.members.push(userId);
-            await group.save();
-            return res.status(200).json({ message: 'You have joined the group.' });
-        } else {
-            const existingRequest = group.joinRequests.find(request => request.userId.toString() === userId);
-            if (existingRequest) {
-                return res.status(400).json({ message: 'You have already requested to join this group.' });
-            }
-  
-            group.joinRequests.push({ userId });
-            await group.save();
-  
-            for (let adminId of group.admins) {
-                await createNotification(
-                    adminId,  // recipientId
-                    userId,   // senderId
-                    'joinRequest',  // type
-                    `User ${user.username} has requested to join the group "${group.name}".`,  // content
-                    `/groups/${groupId}/requests`  // link
-                );
-            }
-  
-            return res.status(200).json({ message: 'Your request to join the group has been sent to the admins.' });
-        }
-    } catch (error) {
-        Sentry.captureException(error);
-        console.error('Error requesting to join study group:', error);
-        res.status(500).json({ message: 'Internal server error' });
+  try {
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret);
+    const { groupId } = req.body;
+    const userId = decoded.userId;
+
+    const group = await StudyGroup.findById(groupId);
+
+    if (!group) {
+      return res.status(404).json({ message: 'Study group not found' });
     }
+
+    if (group.members.includes(userId)) {
+      return res.status(400).json({ message: 'You are already a member of this group.' });
+    }
+
+    const user = await User.findById(userId); // Fetch user details
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    if (group.privacy === 'public') {
+      group.members.push(userId);
+      await group.save();
+
+      // Log activity for joining a public group
+      await logActivity(userId, 'join_study_group', `User joined the public study group: ${group.name}`);
+
+      return res.status(200).json({ message: 'You have joined the group.' });
+    } else {
+      const existingRequest = group.joinRequests.find(request => request.userId.toString() === userId);
+      if (existingRequest) {
+        return res.status(400).json({ message: 'You have already requested to join this group.' });
+      }
+
+      group.joinRequests.push({ userId });
+      await group.save();
+
+      for (let adminId of group.admins) {
+        await createNotification(
+          adminId,  // recipientId
+          userId,   // senderId
+          'joinRequest',  // type
+          `User ${user.username} has requested to join the group "${group.name}".`,  // content
+          `/groups/${groupId}/requests`  // link
+        );
+      }
+
+      // Log activity for requesting to join a private group
+      await logActivity(userId, 'request_to_join_study_group', `User requested to join the private study group: ${group.name}`);
+
+      return res.status(200).json({ message: 'Your request to join the group has been sent to the admins.' });
+    }
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error requesting to join study group:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
 };
 
 
@@ -525,6 +537,9 @@ const sendGroupMessage = async (req, res) => {
       }
     }
 
+    // Log activity for sending a group message
+    await logActivity(senderId, 'send_group_message', `User sent a message in study group: ${group.name}`);
+
     res.status(200).json({ message: 'Message sent successfully', newMessage });
   } catch (error) {
     Sentry.captureException(error);
@@ -601,6 +616,9 @@ const addReaction = async (req, res) => {
       // Emit the reaction to all connected clients in the group
       io.to(groupId).emit("reactionAdded", { messageId, emoji, userId });
 
+      // Log activity for adding a reaction
+      await logActivity(userId, 'add_reaction', `User added reaction: ${emoji} to message in study group: ${group.name}`);
+
       res.status(200).json({ message: 'Reaction added successfully', reactions: message.reactions });
   } catch (error) {
       Sentry.captureException(error);
@@ -669,6 +687,9 @@ const editGroupMessage = async (req, res) => {
       }
     }
 
+    // Log activity for editing the group message
+    await logActivity(userId, 'edit_group_message', `User edited a message in study group: ${group.name}`);
+
     res.status(200).json({ message: "Message edited successfully", message });
   } catch (error) {
     Sentry.captureException(error);
@@ -710,7 +731,11 @@ const deleteGroupMessage = async (req, res) => {
 
     await group.save();
 
+    // Emit the message deletion to all connected clients in the group
     io.to(groupId).emit("messageDeleted", { messageId });
+
+    // Log activity for deleting the group message
+    await logActivity(userId, 'delete_group_message', `User deleted a message in study group: ${group.name}`);
 
     res.status(200).json({ message: "Message deleted successfully" });
   } catch (error) {

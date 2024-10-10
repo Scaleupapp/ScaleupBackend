@@ -2,6 +2,7 @@ const User = require('../models/userModel');
 const jwt = require('jsonwebtoken');
 const aws = require('aws-sdk');
 const Sentry = require('@sentry/node');
+const logActivity = require('../utils/activityLogger');
 
 require('dotenv').config();
 const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
@@ -50,6 +51,9 @@ const updateCertifications = async (req, res) => {
 
     // Save the updated user data
     await user.save();
+
+    // Log the activity
+    await logActivity(userId, 'certification_updated', `User updated certifications with title: ${title}`);
 
     // Return the updated user object as a response
     res.json({ message: 'Certifications information updated successfully', user });

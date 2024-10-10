@@ -2,6 +2,7 @@ const User = require('../models/userModel');
 const jwt = require('jsonwebtoken');
 const aws = require('aws-sdk');
 const Sentry = require('@sentry/node');
+const logActivity = require('../utils/activityLogger');
 
 require('dotenv').config();
 
@@ -91,26 +92,17 @@ const updateProfile = async (req, res) => {
   }
 };
 
-
-
-// Delete education information
 const deleteEducation = async (req, res) => {
   try {
-    // Verify the user's identity using the JWT token
     const token = req.headers.authorization.split(' ')[1];
-    const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
-
-    // Get the user's ID from the decoded token
+    const decoded = jwt.verify(token, jwtSecret);
     const userId = decoded.userId;
 
-    // Find the user by ID in the database
     const user = await User.findById(userId);
-
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Find the education entry by its ID
     const educationId = req.params.educationId;
     const educationEntryIndex = user.education.findIndex((edu) => edu._id == educationId);
 
@@ -118,11 +110,11 @@ const deleteEducation = async (req, res) => {
       return res.status(404).json({ message: 'Education entry not found' });
     }
 
-    // Remove the education entry from the user's education array
     user.education.splice(educationEntryIndex, 1);
-
-    // Save the updated user data
     await user.save();
+
+    // Log activity for deleting education
+    await logActivity(userId, 'delete_education', `User deleted an education entry`);
 
     res.json({ message: 'Education information deleted successfully' });
   } catch (error) {
@@ -134,21 +126,15 @@ const deleteEducation = async (req, res) => {
 
 const deleteWorkExperience = async (req, res) => {
   try {
-    // Verify the user's identity using the JWT token
     const token = req.headers.authorization.split(' ')[1];
-    const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
-
-    // Get the user's ID from the decoded token
+    const decoded = jwt.verify(token, jwtSecret);
     const userId = decoded.userId;
 
-    // Find the user by ID in the database
     const user = await User.findById(userId);
-
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Find the work experience entry by its ID
     const workExperienceId = req.params.workExperienceId;
     const workExperienceIndex = user.workExperience.findIndex(
       (workExp) => workExp._id.toString() === workExperienceId
@@ -158,11 +144,11 @@ const deleteWorkExperience = async (req, res) => {
       return res.status(404).json({ message: 'Work experience entry not found' });
     }
 
-    // Remove the work experience entry
     user.workExperience.splice(workExperienceIndex, 1);
-
-    // Save the updated user data
     await user.save();
+
+    // Log activity for deleting work experience
+    await logActivity(userId, 'delete_work_experience', `User deleted a work experience entry`);
 
     res.json({ message: 'Work experience information deleted successfully' });
   } catch (error) {
@@ -174,21 +160,15 @@ const deleteWorkExperience = async (req, res) => {
 
 const deleteCourse = async (req, res) => {
   try {
-    // Verify the user's identity using the JWT token
     const token = req.headers.authorization.split(' ')[1];
-    const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
-
-    // Get the user's ID from the decoded token
+    const decoded = jwt.verify(token, jwtSecret);
     const userId = decoded.userId;
 
-    // Find the user by ID in the database
     const user = await User.findById(userId);
-
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Find the course entry by its ID
     const courseId = req.params.courseId;
     const courseIndex = user.courses.findIndex((course) => course._id.toString() === courseId);
 
@@ -196,11 +176,11 @@ const deleteCourse = async (req, res) => {
       return res.status(404).json({ message: 'Course entry not found' });
     }
 
-    // Remove the course entry
     user.courses.splice(courseIndex, 1);
-
-    // Save the updated user data
     await user.save();
+
+    // Log activity for deleting course
+    await logActivity(userId, 'delete_course', `User deleted a course entry`);
 
     res.json({ message: 'Course information deleted successfully' });
   } catch (error) {
@@ -212,21 +192,15 @@ const deleteCourse = async (req, res) => {
 
 const deleteCertification = async (req, res) => {
   try {
-    // Verify the user's identity using the JWT token
     const token = req.headers.authorization.split(' ')[1];
-    const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
-
-    // Get the user's ID from the decoded token
+    const decoded = jwt.verify(token, jwtSecret);
     const userId = decoded.userId;
 
-    // Find the user by ID in the database
     const user = await User.findById(userId);
-
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Find the certification entry by its ID
     const certificationId = req.params.certificationId;
     const certificationIndex = user.certifications.findIndex((certification) => certification._id.toString() === certificationId);
 
@@ -234,11 +208,11 @@ const deleteCertification = async (req, res) => {
       return res.status(404).json({ message: 'Certification entry not found' });
     }
 
-    // Remove the certification entry
     user.certifications.splice(certificationIndex, 1);
-
-    // Save the updated user data
     await user.save();
+
+    // Log activity for deleting certification
+    await logActivity(userId, 'delete_certification', `User deleted a certification entry`);
 
     res.json({ message: 'Certification information deleted successfully' });
   } catch (error) {
@@ -251,42 +225,34 @@ const deleteCertification = async (req, res) => {
 const blockUser = async (req, res) => {
   try {
     const { targetUserId } = req.params;
-    
-// Verify the user's identity using the JWT token
-const token = req.headers.authorization.split(' ')[1];
-const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret);
+    const userId = decoded.userId;
 
-// Get the user's ID from the decoded token
-const userId = decoded.userId;
+    const user = await User.findById(userId);
+    const targetUser = await User.findById(targetUserId);
 
-// Find the user by ID in the database
-const user = await User.findById(userId);
-const targetUser = await User.findById(targetUserId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
 
-if (!user) {
-  return res.status(404).json({ message: 'User not found' });
-}
-
-
-    // Add the target user to the logged-in user's blockedUsers array
+    // Block the user and update followers/following relationships
     await User.findByIdAndUpdate(userId, { $addToSet: { blockedUsers: targetUserId } });
-  if(user.following.includes(targetUser.username)){
-    // Remove the target user from the logged-in user's followers and following lists
-    await User.findByIdAndUpdate(userId, { $pull: { following: targetUser.username } });
-    await User.findByIdAndUpdate(targetUserId, { $pull: { followers: user.username } });
+    if (user.following.includes(targetUser.username)) {
+      await User.findByIdAndUpdate(userId, { $pull: { following: targetUser.username } });
+      await User.findByIdAndUpdate(targetUserId, { $pull: { followers: user.username } });
+      await User.findByIdAndUpdate(userId, { $inc: { followingCount: -1 } });
+      await User.findByIdAndUpdate(targetUserId, { $inc: { followersCount: -1 } });
+    }
+    if (targetUser.following.includes(user.username)) {
+      await User.findByIdAndUpdate(userId, { $pull: { followers: targetUser.username } });
+      await User.findByIdAndUpdate(targetUserId, { $pull: { following: user.username } });
+      await User.findByIdAndUpdate(userId, { $inc: { followersCount: -1 } });
+      await User.findByIdAndUpdate(targetUserId, { $inc: { followingCount: -1 } });
+    }
 
-    // Recalculate the followers and following counts for both users
-    await User.findByIdAndUpdate(userId, { $inc: { followingCount: -1} });
-    await User.findByIdAndUpdate(targetUserId, { $inc: { followersCount: -1 } });
-
-  }
-  if( targetUser.following.includes(user.username)){
-    await User.findByIdAndUpdate(userId, { $pull: { followers: targetUser.username } });
-    await User.findByIdAndUpdate(targetUserId, { $pull: { following: user.username } });
-    await User.findByIdAndUpdate(userId, { $inc: { followersCount: -1} });
-    await User.findByIdAndUpdate(targetUserId, { $inc: { followingCount: -1 } });
-
-  }
+    // Log activity for blocking user
+    await logActivity(userId, 'block_user', `User blocked ${targetUser.username}`);
 
     res.json({ message: 'User blocked successfully' });
   } catch (error) {
@@ -390,6 +356,9 @@ const saveUserKycDetails = async (req, res) => {
     user.aadhaarNumber = encryptedAadhaarNumber;
 
     await user.save();
+
+    // Log activity for saving KYC details
+    await logActivity(userId, 'save_kyc_details', `User saved their KYC details`);
 
     res.status(200).json({ message: 'KYC details saved successfully' });
   } catch (error) {

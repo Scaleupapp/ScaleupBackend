@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/userModel');
 const router = express.Router();
 const Sentry = require('@sentry/node');
+const logActivity = require('../utils/activityLogger');
 
 require('dotenv').config();
 const jwtSecret = process.env.JWT_SECRET;
@@ -41,6 +42,9 @@ const updateEducation = async (req, res) => {
 
     // Save the updated user data
     await user.save();
+
+    // Log activity for updating education information
+    await logActivity(userId, 'update_education', `User added new education: ${degree} in ${fieldOfStudy} from ${school}`);
 
     // Return the updated user object as a response
     res.json({ message: 'Education information updated successfully', user });

@@ -2,6 +2,7 @@ const User = require('../models/userModel');
 const jwt = require('jsonwebtoken');
 const aws = require('aws-sdk');
 const Sentry = require('@sentry/node');
+const logActivity = require('../utils/activityLogger');
 
 require('dotenv').config();
 
@@ -50,6 +51,9 @@ const updateCourses = async (req, res) => {
 
     // Save the updated user data
     await user.save();
+
+    // Log activity for updating courses information
+    await logActivity(userId, 'update_courses', `User added a new course: ${title} from ${institution}`);
 
     // Return the updated user object as a response
     res.json({ message: 'Courses information updated successfully', user });

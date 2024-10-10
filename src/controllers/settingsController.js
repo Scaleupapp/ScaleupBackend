@@ -5,6 +5,7 @@ const UserSettings = require('../models/userSettingsModel');
 const Sentry = require('@sentry/node');
 const Feedback = require('../models/feedbackModel');
 const aws = require('aws-sdk');
+const logActivity = require('../utils/activityLogger');
 
 require('dotenv').config();
 const jwtSecret = process.env.JWT_SECRET;
@@ -96,7 +97,7 @@ const changePassword = async (req, res) => {
   try {
     const { oldPassword, newPassword, confirmNewPassword } = req.body;
     const token = req.headers.authorization.split(' ')[1];
-    const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
+    const decoded = jwt.verify(token, jwtSecret);
     const userId = decoded.userId;
 
     // Find the user by ID in the database
@@ -123,6 +124,9 @@ const changePassword = async (req, res) => {
     user.password = hashedPassword;
     await user.save();
 
+    // Log activity for password change
+    await logActivity(userId, 'change_password', 'User changed their password');
+
     res.json({ message: 'Password changed successfully' });
   } catch (error) {
     Sentry.captureException(error);
@@ -132,57 +136,59 @@ const changePassword = async (req, res) => {
 };
 
 const updateCommentPrivileges = async (req, res) => {
-    try {
-      const { commentPrivileges } = req.body; // New comment privileges (e.g., 'everyone', 'followers', 'no one')
-  
-      // Verify the user's identity using the JWT token
-      const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
-      const userId = decoded.userId;
-  
-      // Find the user settings by user ID in the database
-      const userSettings = await UserSettings.findOne({ userId });
-      if (!userSettings) {
-        return res.status(404).json({ message: 'User settings not found' });
-      }
-      
-      // Update the user's comment privileges
-      userSettings.commentPrivacy = commentPrivileges;
-      await userSettings.save();
-  
-      res.json({ message: 'Comment privileges updated successfully' });
-    } catch (error) {
-      Sentry.captureException(error);
-      console.error('Error updating comment privileges:', error);
-      res.status(500).json({ error: 'Internal server error' });
+  try {
+    const { commentPrivileges } = req.body;
+
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret);
+    const userId = decoded.userId;
+
+    const userSettings = await UserSettings.findOne({ userId });
+    if (!userSettings) {
+      return res.status(404).json({ message: 'User settings not found' });
     }
-  };
+
+    // Update the user's comment privileges
+    userSettings.commentPrivacy = commentPrivileges;
+    await userSettings.save();
+
+    // Log activity for comment privileges update
+    await logActivity(userId, 'update_comment_privileges', `User updated comment privileges to: ${commentPrivileges}`);
+
+    res.json({ message: 'Comment privileges updated successfully' });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error updating comment privileges:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 
 const updateContactVisibility = async (req, res) => {
-    try {
-      const { showContact } = req.body;
-      const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, jwtSecret);
-      const userId = decoded.userId;
-  
-      const userSettings = await UserSettings.findOne({ userId });
-  
-      if (!userSettings) {
-        return res.status(404).json({ message: 'User settings not found' });
-      }
-  
-      userSettings.showContact = showContact !== undefined ? showContact : userSettings.showContact;
-     
-  
-      await userSettings.save();
-  
-      res.json({ message: 'Contact visibility updated successfully' });
-    } catch (error) {
-      Sentry.captureException(error);
-      console.error('Error updating contact visibility:', error);
-      res.status(500).json({ error: 'Internal server error' });
+  try {
+    const { showContact } = req.body;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret);
+    const userId = decoded.userId;
+
+    const userSettings = await UserSettings.findOne({ userId });
+
+    if (!userSettings) {
+      return res.status(404).json({ message: 'User settings not found' });
     }
-  };
+
+    userSettings.showContact = showContact !== undefined ? showContact : userSettings.showContact;
+    await userSettings.save();
+
+    // Log activity for contact visibility update
+    await logActivity(userId, 'update_contact_visibility', `User updated contact visibility to: ${showContact}`);
+
+    res.json({ message: 'Contact visibility updated successfully' });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error updating contact visibility:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 
 
 

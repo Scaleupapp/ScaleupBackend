@@ -2,6 +2,7 @@ const User = require('../models/userModel');
 const jwt = require('jsonwebtoken');
 const aws = require('aws-sdk');
 const Sentry = require('@sentry/node');
+const logActivity = require('../utils/activityLogger');
 
 require('dotenv').config();
 
@@ -51,7 +52,7 @@ const updateWorkExperience = async (req, res) => {
     // Add the new work experience entry to the user's profile
     user.workExperience.push(newWorkExperience);
 
-    // Upload the resume file to Amazon S3
+    // Upload the resume file to Amazon S3, if provided
     if (req.file) {
       const resumeFile = req.file;
       const resumeFileExtension = resumeFile.originalname.split('.').pop();
@@ -78,6 +79,9 @@ const updateWorkExperience = async (req, res) => {
 
     // Save the updated user data
     await user.save();
+
+    // Log activity for updating work experience
+    await logActivity(userId, 'update_work_experience', `User added new work experience: ${position} at ${company}`);
 
     // Return the updated user object as a response
     res.json({ message: 'Work experience information updated successfully', user });

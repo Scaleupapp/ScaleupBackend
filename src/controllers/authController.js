@@ -10,6 +10,7 @@ const twilio = require("twilio"); // Import Twilio
 const router = express.Router();
 const nodemailer = require("nodemailer");
 const Sentry = require("@sentry/node");
+const logActivity = require('../utils/activityLogger');
 //const Streak = require('../models/streakModel');
 
 require("dotenv").config();
@@ -45,6 +46,9 @@ const login = async (req, res) => {
 
     if (isPasswordValid) {
       // Password is correct
+      // User is authenticated, log the activity
+     await logActivity(user._id, 'login', 'User logged in');
+
       // Create a JWT token for session management
       const token = jwt.sign({ userId: user._id }, jwtSecret, {
         expiresIn: '7200h',

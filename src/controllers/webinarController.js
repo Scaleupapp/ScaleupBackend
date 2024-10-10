@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken');
 const moment = require('moment');
 require('dotenv').config();
 const { createNotification } = require('./contentController');
+const logActivity = require('../utils/activityLogger');
 
 const jwtSecret = process.env.JWT_SECRET;
 
@@ -34,11 +35,11 @@ exports.createWebinar = async (req, res) => {
     }
 
     if (user.cancellationCount >= 3) {
-        const oneMonthAgo = moment().subtract(1, 'month');
-        if (moment(user.lastCancellationDate).isAfter(oneMonthAgo)) {
-          return res.status(403).json({ message: 'You cannot create webinars for 1 month due to excessive cancellations.' });
-        }
+      const oneMonthAgo = moment().subtract(1, 'month');
+      if (moment(user.lastCancellationDate).isAfter(oneMonthAgo)) {
+        return res.status(403).json({ message: 'You cannot create webinars for 1 month due to excessive cancellations.' });
       }
+    }
 
     // Create a new webinar entry
     const newWebinar = new Webinar({
@@ -67,6 +68,10 @@ exports.createWebinar = async (req, res) => {
     }
 
     await newWebinar.save();
+
+    // Log activity for creating a webinar
+    await logActivity(user._id, 'create_webinar', `User created a webinar titled: ${title}`);
+
     res.status(201).json({ message: 'Webinar created successfully', webinar: newWebinar });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -139,7 +144,9 @@ exports.registerForWebinar = async (req, res) => {
 
     const { webinarId } = req.params;
     const webinar = await Webinar.findById(webinarId);
-    if (!webinar || webinar.isCancelled) return res.status(404).json({ message: 'Webinar not found or cancelled' });
+    if (!webinar || webinar.isCancelled) {
+      return res.status(404).json({ message: 'Webinar not found or cancelled' });
+    }
 
     // Check if the registration window is open
     const timeDifference = moment(webinar.scheduledTime).diff(moment(), 'minutes');
@@ -156,6 +163,10 @@ exports.registerForWebinar = async (req, res) => {
     if (!webinar.attendees.includes(user._id)) {
       webinar.attendees.push(user._id);
       await webinar.save();
+
+      // Log activity for registering for a webinar
+      await logActivity(user._id, 'register_for_webinar', `User registered for webinar titled: ${webinar.title}`);
+
       res.status(200).json({ message: 'Registered successfully', webinar });
     } else {
       res.status(400).json({ message: 'You are already registered' });
@@ -306,58 +317,64 @@ exports.endWebinar = async (req, res) => {
   
 // Add a comment to a webinar
 exports.addComment = async (req, res) => {
-    try {
-      const user = await authenticateUser(req);
-      const { webinarId } = req.params;
-      const { content } = req.body;
-  
-      const webinar = await Webinar.findById(webinarId);
-      if (!webinar || webinar.isCancelled) {
-        return res.status(404).json({ message: 'Webinar not found or cancelled' });
-      }
-  
-      if (!webinar.isCommentEnabled) {
-        return res.status(403).json({ message: 'Comments are disabled for this webinar.' });
-      }
-  
-      const newComment = {
-        user: user._id,
-        content,
-        createdAt: new Date(),
-      };
-  
-      webinar.comments.push(newComment);
-      await webinar.save();
-  
-      res.status(201).json({ message: 'Comment added successfully', comment: newComment });
-    } catch (error) {
-      res.status(500).json({ message: error.message });
+  try {
+    const user = await authenticateUser(req);
+    const { webinarId } = req.params;
+    const { content } = req.body;
+
+    const webinar = await Webinar.findById(webinarId);
+    if (!webinar || webinar.isCancelled) {
+      return res.status(404).json({ message: 'Webinar not found or cancelled' });
     }
-  };
-  
-  // Like a webinar
-  exports.likeWebinar = async (req, res) => {
-    try {
-      const user = await authenticateUser(req);
-      const { webinarId } = req.params;
-  
-      const webinar = await Webinar.findById(webinarId);
-      if (!webinar || webinar.isCancelled) {
-        return res.status(404).json({ message: 'Webinar not found or cancelled' });
-      }
-  
-      if (webinar.likes.includes(user._id)) {
-        return res.status(400).json({ message: 'You have already liked this webinar.' });
-      }
-  
-      webinar.likes.push(user._id);
-      await webinar.save();
-  
-      res.status(200).json({ message: 'Webinar liked successfully' });
-    } catch (error) {
-      res.status(500).json({ message: error.message });
+
+    if (!webinar.isCommentEnabled) {
+      return res.status(403).json({ message: 'Comments are disabled for this webinar.' });
     }
-  };
+
+    const newComment = {
+      user: user._id,
+      content,
+      createdAt: new Date(),
+    };
+
+    webinar.comments.push(newComment);
+    await webinar.save();
+
+    // Log activity for adding a comment to a webinar
+    await logActivity(user._id, 'add_comment_webinar', `User added a comment to webinar titled: ${webinar.title}`);
+
+    res.status(201).json({ message: 'Comment added successfully', comment: newComment });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+  
+// Like a webinar
+exports.likeWebinar = async (req, res) => {
+  try {
+    const user = await authenticateUser(req);
+    const { webinarId } = req.params;
+
+    const webinar = await Webinar.findById(webinarId);
+    if (!webinar || webinar.isCancelled) {
+      return res.status(404).json({ message: 'Webinar not found or cancelled' });
+    }
+
+    if (webinar.likes.includes(user._id)) {
+      return res.status(400).json({ message: 'You have already liked this webinar.' });
+    }
+
+    webinar.likes.push(user._id);
+    await webinar.save();
+
+    // Log activity for liking a webinar
+    await logActivity(user._id, 'like_webinar', `User liked webinar titled: ${webinar.title}`);
+
+    res.status(200).json({ message: 'Webinar liked successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
   
   // Unlike a webinar
   exports.unlikeWebinar = async (req, res) => {
@@ -379,34 +396,37 @@ exports.addComment = async (req, res) => {
     }
   };
   
-  // Like a comment
-  exports.likeComment = async (req, res) => {
-    try {
-      const user = await authenticateUser(req);
-      const { webinarId, commentId } = req.params;
-  
-      const webinar = await Webinar.findById(webinarId);
-      if (!webinar || webinar.isCancelled) {
-        return res.status(404).json({ message: 'Webinar not found or cancelled' });
-      }
-  
-      const comment = webinar.comments.id(commentId);
-      if (!comment) {
-        return res.status(404).json({ message: 'Comment not found' });
-      }
-  
-      if (comment.likes.includes(user._id)) {
-        return res.status(400).json({ message: 'You have already liked this comment.' });
-      }
-  
-      comment.likes.push(user._id);
-      await webinar.save();
-  
-      res.status(200).json({ message: 'Comment liked successfully' });
-    } catch (error) {
-      res.status(500).json({ message: error.message });
+// Like a comment
+exports.likeComment = async (req, res) => {
+  try {
+    const user = await authenticateUser(req);
+    const { webinarId, commentId } = req.params;
+
+    const webinar = await Webinar.findById(webinarId);
+    if (!webinar || webinar.isCancelled) {
+      return res.status(404).json({ message: 'Webinar not found or cancelled' });
     }
-  };
+
+    const comment = webinar.comments.id(commentId);
+    if (!comment) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+
+    if (comment.likes.includes(user._id)) {
+      return res.status(400).json({ message: 'You have already liked this comment.' });
+    }
+
+    comment.likes.push(user._id);
+    await webinar.save();
+
+    // Log activity for liking a comment on a webinar
+    await logActivity(user._id, 'like_webinar_comment', `User liked a comment on webinar titled: ${webinar.title}`);
+
+    res.status(200).json({ message: 'Comment liked successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
   
   // Join Waiting Room
 exports.joinWaitingRoom = async (req, res) => {
@@ -453,28 +473,31 @@ exports.joinWaitingRoom = async (req, res) => {
     }
   };
   
-  // Join Webinar
-  exports.joinWebinar = async (req, res) => {
-    try {
-      const user = await authenticateUser(req);
-      const { webinarId } = req.params;
-  
-      const webinar = await Webinar.findById(webinarId);
-      if (!webinar || webinar.isCancelled || webinar.status !== 'Live') {
-        return res.status(404).json({ message: 'Webinar not found, cancelled, or not live yet' });
-      }
-  
-      // Add user to the webinar attendees if not already joined
-      if (!webinar.attendees.includes(user._id)) {
-        webinar.attendees.push(user._id);
-        await webinar.save();
-      }
-  
-      res.status(200).json({ message: 'Joined the webinar', webinar });
-    } catch (error) {
-      res.status(500).json({ message: error.message });
+// Join Webinar
+exports.joinWebinar = async (req, res) => {
+  try {
+    const user = await authenticateUser(req);
+    const { webinarId } = req.params;
+
+    const webinar = await Webinar.findById(webinarId);
+    if (!webinar || webinar.isCancelled || webinar.status !== 'Live') {
+      return res.status(404).json({ message: 'Webinar not found, cancelled, or not live yet' });
     }
-  };
+
+    // Add user to the webinar attendees if not already joined
+    if (!webinar.attendees.includes(user._id)) {
+      webinar.attendees.push(user._id);
+      await webinar.save();
+    }
+
+    // Log activity for joining a webinar
+    await logActivity(user._id, 'join_webinar', `User joined webinar titled: ${webinar.title}`);
+
+    res.status(200).json({ message: 'Joined the webinar', webinar });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
   
   // Leave Webinar
   exports.leaveWebinar = async (req, res) => {

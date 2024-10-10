@@ -9,6 +9,7 @@ require('dotenv').config();
 const OpenAI = require('openai');
 const { createNotification } = require('./contentController');
 const AreaOfImprovement = require('../models/areaOfImprovementModel');
+const logActivity = require('../utils/activityLogger');
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY, // Ensure your API key is stored securely
@@ -395,6 +396,9 @@ exports.joinQuiz = async (req, res) => {
     user.quizParticipation.push({ quizId });
     await user.save();
 
+    // Log activity for joining the quiz
+    await logActivity(userId, 'join_quiz', `User joined the quiz with ID: ${quizId}`);
+
     res.status(200).json({ message: 'Successfully joined the quiz' });
     
   } catch (error) {
@@ -403,7 +407,6 @@ exports.joinQuiz = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
-
 
 exports.initiateQuizParticipation = async (req, res) => {
   try {

@@ -13,7 +13,7 @@
   const LearnList = require('../models/learnListModel');
   const LearnListProgress = require('../models/learnListProgressModel');
   const Discussion = require('../models/discussionModel');
-  
+  const logActivity = require('../utils/activityLogger');
 
   const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
   const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
@@ -103,6 +103,9 @@
   
         await newContent.save();
   
+        // Log activity for adding content
+        await logActivity(userId, 'content_added', `User added new content with heading: ${heading}`);
+  
         return res.status(200).json({ message: isDraft === 'true' ? 'Content saved as draft' : 'Content published successfully' });
       });
     } catch (error) {
@@ -156,6 +159,9 @@
         content.postdate = Date.now(); // Set the postdate when publishing
   
         await content.save();
+  
+        // Log activity for publishing a draft
+        await logActivity(userId, 'publish_draft', `User published draft with heading: ${content.heading}`);
   
         res.status(200).json({ message: 'Content published successfully' });
       } else {
@@ -515,38 +521,40 @@
     }
   };
 
-  // Controller function to like a content item
   exports.likeContent = async (req, res) => {
     try {
       const { contentId } = req.params;
       const token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, jwtSecret);
       const userId = decoded.userId;
-
+  
       const updatedContent = await Content.findByIdAndUpdate(
         contentId,
         { $addToSet: { likes: userId } },
         { new: true }
       );
-
+  
       if (!updatedContent) {
         return res.status(404).json({ error: 'Content not found' });
       }
-
+  
       updatedContent.likeCount = updatedContent.likes.length;
       await updatedContent.save();
-
+  
       // Update interests for the user
       const relatedTopics = updatedContent.relatedTopics || [];
       const hashtags = updatedContent.hashtags || [];
       await updateInterests(userId, [...relatedTopics, ...hashtags]);
-
+  
       // Create a notification and return the updated likeCount
       if (updatedContent.userId.toString() !== userId) {
         const liker = await User.findById(userId);
         await exports.createNotification(updatedContent.userId, userId, 'like', `${liker.username} liked your post.`, `/api/content/post/${contentId}`);
       }
-
+  
+      // Log activity for liking content
+      await logActivity(userId, 'like_content', `User liked content with heading: ${updatedContent.heading}`);
+  
       res.json({ likeCount: updatedContent.likeCount });
     } catch (error) {
       Sentry.captureException(error);
@@ -555,93 +563,98 @@
     }
   };
     
-    // Controller function to unlike a content item
-    exports.unlikeContent = async (req, res) => {
-      try {
-        const { contentId } = req.params;
-        const token = req.headers.authorization.split(' ')[1];
-        const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
-        const userId = decoded.userId;
-    
-        // Find the content by ID and update the likes array to remove the user's ID
-        const content = await Content.findByIdAndUpdate(
-          contentId,
-          { $pull: { likes: userId } }, // Remove the user's ID from the likes array
-          { new: true } // Return the updated content
-        );
-    
-        if (!content) {
-          return res.status(404).json({ error: 'Content not found' });
-        }
-    
-        // Update the likeCount
-        content.likeCount = content.likes.length;
-    
-        // Save the updated content
-        await content.save();
-    
-        // Return the updated likeCount
-        res.json({ likeCount: content.likeCount });
-      } catch (error) {
-        Sentry.captureException(error);
-        console.error('Error unliking content:', error);
-        res.status(500).json({ error: 'Internal server error' });
+  exports.unlikeContent = async (req, res) => {
+    try {
+      const { contentId } = req.params;
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, jwtSecret);
+      const userId = decoded.userId;
+  
+      // Find the content by ID and update the likes array to remove the user's ID
+      const content = await Content.findByIdAndUpdate(
+        contentId,
+        { $pull: { likes: userId } },
+        { new: true }
+      );
+  
+      if (!content) {
+        return res.status(404).json({ error: 'Content not found' });
       }
-    };
+  
+      // Update the likeCount
+      content.likeCount = content.likes.length;
+  
+      // Save the updated content
+      await content.save();
+  
+      // Log activity for unliking content
+      await logActivity(userId, 'unlike_content', `User unliked content with heading: ${content.heading}`);
+  
+      // Return the updated likeCount
+      res.json({ likeCount: content.likeCount });
+    } catch (error) {
+      Sentry.captureException(error);
+      console.error('Error unliking content:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
 
-    exports.addComment = async (req, res) => {
-      try {
-        const { contentId, commentText } = req.body;
-        const token = req.headers.authorization.split(' ')[1];
-        const decoded = jwt.verify(token, jwtSecret);
-        const userId = decoded.userId;
-    
-        const user = await User.findById(userId);
-        if (!user) {
-          return res.status(404).json({ error: 'User not found' });
-        }
-    
-        const content = await Content.findById(contentId);
-        if (!content) {
-          return res.status(404).json({ error: 'Content not found' });
-        }
-    
-        const newComment = new Comment({
-          contentId,
-          userId,
-          username: user.username,
-          commentText
-        });
-    
-        await newComment.save();
-        content.comments.push(newComment._id);
-        content.CommentCount = content.comments.length;
-        await content.save();
-    
-        // Handle mentions
-        const mentionedUsers = await parseMentions(commentText);
-        for (const mentionedUser of mentionedUsers) {
-          await exports.createNotification(
-            mentionedUser._id,
-            userId,
-            'mention',
-            `${user.username} mentioned you in a comment.`,
-            `/api/content/post/${contentId}`
-          );
-        }
-    
-        // Normal comment notification
-        if (content.userId.toString() !== userId) {
-          await exports.createNotification(content.userId, userId, 'comment', `${user.username} commented on your post.`, `/api/content/post/${contentId}`);
-        }
-    
-        res.status(200).json({ message: 'Comment added successfully' });
-      } catch (error) {
-        Sentry.captureException(error);
-        console.error('Comment creation error:', error);
-        res.status(500).json({ error: 'Internal server error' });
+  exports.addComment = async (req, res) => {
+    try {
+      const { contentId, commentText } = req.body;
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, jwtSecret);
+      const userId = decoded.userId;
+  
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
       }
-    };
+  
+      const content = await Content.findById(contentId);
+      if (!content) {
+        return res.status(404).json({ error: 'Content not found' });
+      }
+  
+      const newComment = new Comment({
+        contentId,
+        userId,
+        username: user.username,
+        commentText
+      });
+  
+      await newComment.save();
+      content.comments.push(newComment._id);
+      content.CommentCount = content.comments.length;
+      await content.save();
+  
+      // Handle mentions
+      const mentionedUsers = await parseMentions(commentText);
+      for (const mentionedUser of mentionedUsers) {
+        await exports.createNotification(
+          mentionedUser._id,
+          userId,
+          'mention',
+          `${user.username} mentioned you in a comment.`,
+          `/api/content/post/${contentId}`
+        );
+      }
+  
+      // Normal comment notification
+      if (content.userId.toString() !== userId) {
+        await exports.createNotification(content.userId, userId, 'comment', `${user.username} commented on your post.`, `/api/content/post/${contentId}`);
+      }
+  
+      // Log activity for adding a comment
+      await logActivity(userId, 'add_comment', `User added a comment on content with heading: ${content.heading}`);
+  
+      res.status(200).json({ message: 'Comment added successfully' });
+    } catch (error) {
+      Sentry.captureException(error);
+      console.error('Comment creation error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
     
   // Controller function to get content details by content ID
   exports.getPostDetails = async (req, res) => {
@@ -875,25 +888,27 @@
       const token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, jwtSecret);
       const userId = decoded.userId;
-
+  
       const content = await Content.findById(contentId);
       if (!content) {
         return res.status(404).json({ error: 'Content not found' });
       }
-
+  
       // Verify the user attempting to delete the content is the owner
       if (content.userId.toString() !== userId) {
         return res.status(403).json({ message: 'You do not have permission to delete this content' });
       }
-
-        // Delete associated comments from MongoDB
-        await Comment.deleteMany({ contentId: content._id });
-
-        // Delete the content document from MongoDB
-        await Content.deleteOne({ _id: contentId });
-
-        res.json({ message: 'Content and associated comments deleted successfully' });
-      
+  
+      // Delete associated comments from MongoDB
+      await Comment.deleteMany({ contentId: content._id });
+  
+      // Delete the content document from MongoDB
+      await Content.deleteOne({ _id: contentId });
+  
+      // Log activity for deleting content
+      await logActivity(userId, 'delete_content', `User deleted content `);
+  
+      res.json({ message: 'Content and associated comments deleted successfully' });
     } catch (error) {
       Sentry.captureException(error);
       console.error('Error deleting content and associated comments:', error);
@@ -945,37 +960,40 @@
       const token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, jwtSecret);
       const userId = decoded.userId;
-
+  
       const comment = await Comment.findById(commentId);
-
+  
       if (!comment) {
         return res.status(404).json({ error: 'Comment not found' });
       }
-
+  
       const content = await Content.findById(comment.contentId);
-
+  
       if (!content) {
         return res.status(404).json({ error: 'Content not found' });
       }
-
+  
       // Check if the logged-in user is the author of the comment or the creator of the content
       if (comment.userId.toString() !== userId && content.userId.toString() !== userId) {
         return res.status(403).json({ message: 'You do not have permission to delete this comment' });
       }
-
+  
       // Delete the comment
       await Comment.deleteOne({ _id: commentId });
-
+  
       // Remove the comment reference from the associated content
       await Content.updateOne(
         { _id: comment.contentId },
         { $pull: { comments: commentId } }
       );
-
+  
       // Update the CommentCount in the content model
       content.CommentCount = content.comments.length;
       await content.save();
-
+  
+      // Log activity for deleting a comment
+      await logActivity(userId, 'delete_comment', `User deleted a comment on content with heading: ${content.heading}`);
+  
       res.json({ message: 'Comment deleted successfully' });
     } catch (error) {
       Sentry.captureException(error);
@@ -991,31 +1009,34 @@
       const token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, jwtSecret);
       const userId = decoded.userId;
-
+  
       const content = await Content.findById(contentId);
       if (!content) {
         return res.status(404).json({ error: 'Content not found' });
       }
-
+  
       // Check if the user is trying to save their own content
       if (content.userId.toString() === userId) {
         return res.status(400).json({ error: 'You cannot save your own content' });
       }
-
+  
       const user = await User.findById(userId);
-
+  
       // Check if the content is already saved
       const isAlreadySaved = user.savedContent.some(
         (savedContent) => savedContent.toString() === contentId
       );
-
+  
       if (isAlreadySaved) {
         return res.status(400).json({ error: 'Content is already saved' });
       }
-
+  
       user.savedContent.push(contentId);
       await user.save();
-
+  
+      // Log activity for saving content
+      await logActivity(userId, 'save_content', `User saved content with heading: ${content.heading}`);
+  
       res.json({ message: 'Content saved successfully' });
     } catch (error) {
       Sentry.captureException(error);
@@ -1069,32 +1090,35 @@
     try {
       const { contentId } = req.params;
       const { captions, relatedTopics, hashtags } = req.body;
-
+  
       const token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, jwtSecret);
       const userId = decoded.userId;
-
+  
       const content = await Content.findById(contentId);
-
+  
       if (!content) {
         return res.status(404).json({ error: 'Content not found' });
       }
-
+  
       if (content.userId.toString() !== userId) {
         return res.status(403).json({ message: 'You do not have permission to update this content' });
       }
-
+  
       if (captions !== undefined) content.captions = captions;
       if (relatedTopics !== undefined) content.relatedTopics = relatedTopics.split(',').map(topic => topic.trim());
       if (hashtags !== undefined) content.hashtags = hashtags.split(',').map(tag => tag.trim());
-
+  
       // Reset smeVerify to Pending only if verify is Yes
       if (content.verify === 'Yes') {
         content.smeVerify = 'Pending';
       }
-
+  
       await content.save();
-
+  
+      // Log activity for updating content
+      await logActivity(userId, 'update_content', `User updated content fields for content with heading: ${content.heading}`);
+  
       res.json({ message: 'Content updated successfully', content });
     } catch (error) {
       console.error('Error updating content fields:', error);
@@ -1153,6 +1177,9 @@
         content.CommentCount = content.comments.length;
         await content.save();
   
+        // Log activity for adding a reply
+        await logActivity(userId, 'add_reply', `User replied to a comment on content with heading: ${content.heading}`);
+  
         // Notify the owner of the content
         if (content.userId.toString() !== userId) {
           const recipientId = content.userId;
@@ -1205,28 +1232,29 @@
     }
   };
 
-
-  // Controller function to like a comment
   exports.likeComment = async (req, res) => {
     try {
       const { commentId } = req.params;
       const token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       const userId = decoded.userId;
-
+  
       const comment = await Comment.findByIdAndUpdate(
         commentId,
         { $addToSet: { likes: userId } },
         { new: true }
       );
-
+  
       if (!comment) {
         return res.status(404).json({ error: 'Comment not found' });
       }
-
+  
       comment.likeCount = comment.likes.length;
       await comment.save();
-
+  
+      // Log activity for liking a comment
+      await logActivity(userId, 'like_comment', `User liked a comment on content with comment ID: ${commentId}`);
+  
       if (comment.userId.toString() !== userId) {
         const liker = await User.findById(userId);
         const recipientId = comment.userId;
@@ -1234,10 +1262,10 @@
         const type = 'like';
         const notificationContent = `${liker.username} liked your comment.`;
         const link = `/api/content/comment/${commentId}`;
-
+  
         await exports.createNotification(recipientId, senderId, type, notificationContent, link);
       }
-
+  
       res.json({ likeCount: comment.likeCount });
     } catch (error) {
       Sentry.captureException(error);
@@ -1275,7 +1303,7 @@
     }
   };
 
-  // Create a new Learn List
+// Create a new Learn List
 exports.createLearnList = async (req, res) => {
   try {
     const { name, description, contentItems, visibility, relatedTopics } = req.body; // Add relatedTopics to the destructuring
@@ -1305,6 +1333,10 @@ exports.createLearnList = async (req, res) => {
     });
 
     await learnList.save();
+
+    // Log activity for creating a new Learn List
+    await logActivity(creatorId, 'create_learn_list', `User created a new Learn List: ${name}`);
+
     res.status(201).json({ message: 'Learn List created successfully', learnList });
   } catch (error) {
     Sentry.captureException(error);
@@ -1397,6 +1429,10 @@ exports.addContentToLearnList = async (req, res) => {
     }
 
     await learnList.save();
+
+    // Log activity for adding content to the Learn List
+    await logActivity(userId, 'add_content_to_learn_list', `User added content with ID: ${contentId} to Learn List: ${learnList.name}`);
+
     res.status(200).json({ message: 'Content added and sequences updated successfully', learnList });
   } catch (error) {
     Sentry.captureException(error);
@@ -1477,6 +1513,10 @@ exports.deleteLearnList = async (req, res) => {
     }
 
     await learnList.deleteOne();  // Use deleteOne instead of remove
+
+    // Log activity for deleting the Learn List
+    await logActivity(userId, 'delete_learn_list', `User deleted Learn List: ${learnList.name}`);
+
     res.status(200).json({ message: 'Learn List deleted successfully' });
   } catch (error) {
     Sentry.captureException(error);
@@ -1666,6 +1706,9 @@ exports.createDiscussion = async (req, res) => {
     learnList.discussions.push(discussion._id);
     await learnList.save();
 
+    // Log activity for creating a discussion
+    await logActivity(userId, 'create_discussion', `User created a new discussion titled: "${title}" in Learn List: ${learnList.name}`);
+
     res.status(201).json({ message: 'Discussion created successfully', discussion });
   } catch (error) {
     console.error('Error creating discussion:', error);
@@ -1702,6 +1745,9 @@ exports.addReplytoDiscussion = async (req, res) => {
 
     // Populate the user information (including profile picture) for the response
     const populatedDiscussion = await discussion.populate('replies.user', 'username profilePicture');
+
+    // Log activity for replying to a discussion
+    await logActivity(userId, 'add_reply_to_discussion', `User replied to the discussion titled: "${discussion.title}" in Learn List: ${learnListId}`);
 
     // Notify the discussion owner
     if (discussion.user.toString() !== userId) {
@@ -1803,6 +1849,9 @@ exports.pinDiscussion = async (req, res) => {
     learnList.pinnedDiscussions.push(discussionId);
     await learnList.save();
 
+    // Log activity for pinning the discussion
+    await logActivity(userId, 'pin_discussion', `User pinned discussion ${discussionId} to Learn List ${learnList.name}`);
+
     res.status(200).json({ message: 'Discussion pinned successfully', pinnedDiscussions: learnList.pinnedDiscussions });
   } catch (error) {
     Sentry.captureException(error);
@@ -1837,6 +1886,9 @@ exports.unpinDiscussion = async (req, res) => {
 
     learnList.pinnedDiscussions.splice(discussionIndex, 1);
     await learnList.save();
+
+    // Log activity for unpinning the discussion
+    await logActivity(userId, 'unpin_discussion', `User unpinned discussion ${discussionId} from Learn List ${learnList.name}`);
 
     res.status(200).json({ message: 'Discussion unpinned successfully', pinnedDiscussions: learnList.pinnedDiscussions });
   } catch (error) {
@@ -1873,6 +1925,9 @@ exports.pinComment = async (req, res) => {
     content.pinnedComment = commentId;
     await content.save();
 
+    // Log activity for pinning the comment
+    await logActivity(userId, 'pin_comment', `User pinned comment ${commentId} on content ${contentId}`);
+
     res.status(200).json({ message: 'Comment pinned successfully', pinnedComment: content.pinnedComment });
   } catch (error) {
     Sentry.captureException(error);
@@ -1902,6 +1957,9 @@ exports.unpinComment = async (req, res) => {
     // Update the pinnedComment field to null
     content.pinnedComment = null;
     await content.save();
+
+    // Log activity for unpinning the comment
+    await logActivity(userId, 'unpin_comment', `User unpinned comment from content ${contentId}`);
 
     res.status(200).json({ message: 'Comment unpinned successfully' });
   } catch (error) {

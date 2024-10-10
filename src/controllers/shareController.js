@@ -6,6 +6,7 @@ const User = require('../models/userModel');
 const Content = require('../models/contentModel'); // Import the Content model
 const { createNotification } = require('./contentController');
 const jwt = require("jsonwebtoken");
+const logActivity = require('../utils/activityLogger');
 
 exports.shareContent = async (req, res) => {
     try {
@@ -65,6 +66,9 @@ exports.shareContent = async (req, res) => {
 
         // Save the updated ContentShare document
         await contentShare.save();
+
+        // Log activity for sharing content
+        await logActivity(senderId, 'share_content', `User shared content with IDs: ${recipientIds.join(", ")}`);
 
         res.status(200).json({ message: 'Content shared successfully', contentShare });
     } catch (error) {

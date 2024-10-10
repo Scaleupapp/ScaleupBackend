@@ -1,6 +1,7 @@
 const Conversation = require("../models/conversationModel");
 const User = require("../models/userModel");
 const jwt = require("jsonwebtoken");
+const logActivity = require('../utils/activityLogger');
 
 exports.createConversation = async (req, res) => {
   try {
@@ -28,6 +29,9 @@ exports.createConversation = async (req, res) => {
     });
 
     await newConversation.save();
+
+    // Log activity for creating a conversation
+    await logActivity(senderId, 'create_conversation', `User started a new conversation with recipient ${recipientId}`);
 
     res.status(201).json(newConversation);
   } catch (error) {
@@ -60,6 +64,9 @@ exports.deleteConversation = async (req, res) => {
     const userId = decoded.userId;
 
     await Conversation.findByIdAndUpdate(conversationId, { $push: { deletedBy: userId } });
+
+    // Log activity for deleting a conversation
+    await logActivity(userId, 'delete_conversation', `User deleted conversation with ID ${conversationId}`);
 
     res.status(200).json({ message: "Conversation deleted successfully" });
   } catch (error) {

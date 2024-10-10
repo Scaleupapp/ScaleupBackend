@@ -5,6 +5,7 @@ const Notification = require("../models/notificationModel");
 const Conversation = require("../models/conversationModel");
 const jwt = require("jsonwebtoken");
 const { createNotification } = require('./contentController');
+const logActivity = require('../utils/activityLogger');
 
 let io;
 exports.setSocketIo = (socketIoInstance) => {
@@ -34,6 +35,9 @@ exports.sendMessage = async (req, res) => {
     await newMessage.save();
 
     io.to(conversationId).emit("receiveMessage", newMessage);
+
+    // Log activity for sending a message
+    await logActivity(senderId, 'message_sent', `User sent a message in conversation ${conversationId}`);
 
     // Send notification to the recipient(s)
     const recipientId = conversation.members.find(member => member.toString() !== senderId);
@@ -103,6 +107,9 @@ exports.addReaction = async (req, res) => {
     // Emit the reaction to all connected clients in the conversation
     io.to(conversationId).emit("reactionAdded", { messageId, emoji, userId });
 
+    // Log activity for adding a reaction
+    await logActivity(userId, 'reaction_added', `User added a reaction to message ${messageId} in conversation ${conversationId}`);
+
     res.status(200).json({ message: "Reaction added successfully", reactions: message.reactions });
   } catch (error) {
     console.error("Error adding reaction:", error);
@@ -145,6 +152,9 @@ exports.editMessage = async (req, res) => {
 
     io.to(conversationId).emit("messageEdited", { messageId, content });
 
+    // Log activity for editing a message
+    await logActivity(userId, 'message_edited', `User edited message ${messageId} in conversation ${conversationId}`);
+
     res.status(200).json({ message: "Message edited successfully", message });
   } catch (error) {
     console.error("Error editing message:", error);
@@ -181,10 +191,12 @@ exports.deleteMessage = async (req, res) => {
 
     io.to(conversationId).emit("messageDeleted", { messageId });
 
+    // Log activity for deleting a message
+    await logActivity(userId, 'message_deleted', `User deleted message ${messageId} in conversation ${conversationId}`);
+
     res.status(200).json({ message: "Message deleted successfully" });
   } catch (error) {
     console.error("Error deleting message:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };
-

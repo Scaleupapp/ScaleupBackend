@@ -9,6 +9,7 @@ const Sentry = require('@sentry/node');
 require('dotenv').config();
 const jwtSecret = process.env.JWT_SECRET;
 const UserSettings = require('../models/userSettingsModel');
+const logActivity = require('../utils/activityLogger');
 
 // Controller function to search for users based on various criteria
 exports.searchUsers = async (req, res) => {
@@ -108,8 +109,6 @@ exports.searchUsers = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
-
-
 
 // Controller function to get detailed information about a specific user
 exports.getUserDetails = async (req, res) => {
@@ -241,66 +240,65 @@ exports.getUserDetails = async (req, res) => {
   }
 };
 
+// Function to follow a user
+exports.followUser = async (req, res) => {
+  try {
+    // Get the target user's user ID from the request parameters
+    const targetUserId = req.params.userId; // Updated to use user ID
 
+    // Get the logged-in user's user ID from the JWT token
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
+    const followerUserId = decoded.userId;
 
-  // Function to follow a user
-  exports.followUser = async (req, res) => {
-      try {
-        // Get the target user's user ID from the request parameters
-        const targetUserId = req.params.userId; // Updated to use user ID
-    
-        // Get the logged-in user's user ID from the JWT token
-        const token = req.headers.authorization.split(' ')[1];
-        const decoded = jwt.verify(token, jwtSecret); // Replace with your actual secret key
-        const followerUserId = decoded.userId;
-    
-        // Check if the user is trying to follow themselves
-        if (followerUserId === targetUserId) {
-          return res.status(400).json({ message: "You can't follow yourself" });
-        }
-    
-        // Find the target user by their user ID
-        const targetUser = await User.findById(targetUserId);
-    
-        if (!targetUser) {
-          return res.status(404).json({ message: 'Target user not found' });
-        }
-    
-        // Find the logged-in user by their user ID
-        const user = await User.findById(followerUserId);
-        
-        const followerUser =await User.findById(followerUserId);
+    // Check if the user is trying to follow themselves
+    if (followerUserId === targetUserId) {
+      return res.status(400).json({ message: "You can't follow yourself" });
+    }
 
-        // Check if the user is already following the target user
-        if (user.following.includes(targetUser.username)) {
-          return res.status(400).json({ message: 'You are already following this user' });
-        }
-    
-        // Update the logged-in user's following list and count
-        user.following.push(targetUser.username);
-        user.followingCount += 1;
-        await user.save();
-    
-        // Update the target user's followers list and count
-        targetUser.followers.push(user.username);
-        targetUser.followersCount += 1;
-        await targetUser.save();
+    // Find the target user by their user ID
+    const targetUser = await User.findById(targetUserId);
+    if (!targetUser) {
+      return res.status(404).json({ message: 'Target user not found' });
+    }
 
-        const recipientId = targetUser.userId; 
-        const senderId = followerUserId; 
-        const type = 'Follow'; // Notification type
-        const notificationContent = ` ${followerUser.username} followed you .`; // Notification content
-        const link = `/api/content/detail/${followerUserId}`; // Link to the liked post
+    // Find the logged-in user by their user ID
+    const user = await User.findById(followerUserId);
+    const followerUser = await User.findById(followerUserId);
+
+    // Check if the user is already following the target user
+    if (user.following.includes(targetUser.username)) {
+      return res.status(400).json({ message: 'You are already following this user' });
+    }
+
+    // Update the logged-in user's following list and count
+    user.following.push(targetUser.username);
+    user.followingCount += 1;
+    await user.save();
+
+    // Update the target user's followers list and count
+    targetUser.followers.push(user.username);
+    targetUser.followersCount += 1;
+    await targetUser.save();
+
+    const recipientId = targetUser._id; 
+    const senderId = followerUserId; 
+    const type = 'Follow'; // Notification type
+    const notificationContent = `${followerUser.username} followed you.`; // Notification content
+    const link = `/api/content/detail/${followerUserId}`; // Link to the follower's profile
   
-       await createNotification(recipientId, senderId, type, notificationContent, link);
-    
-        res.status(200).json({ message: 'You are now following this user' });
-      } catch (error) {
-        Sentry.captureException(error);
-        console.error('Error following user:', error);
-        res.status(500).json({ message: 'Internal server error' });
-      }
-    };
+    await createNotification(recipientId, senderId, type, notificationContent, link);
+
+    // Log activity for following a user
+    await logActivity(followerUserId, 'follow_user', `User followed ${targetUser.username}`);
+
+    res.status(200).json({ message: 'You are now following this user' });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Error following user:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
     
   // Function to unfollow a user
   exports.unfollowUser = async (req, res) => {
@@ -442,6 +440,11 @@ exports.getUserDetails = async (req, res) => {
         await targetUser.save();
   
         await createNotification(targetUser._id, user._id, 'InnerCircleRequest', `You have a new Inner Circle request from ${user.username}.`);
+      }
+  
+      // Log activity for sending Inner Circle requests
+      if (targetUserIds.length > 0) {
+        await logActivity(userId, 'send_inner_circle_requests', `User sent Inner Circle requests to: ${targetUserIds.join(', ')}`);
       }
   
       if (errors.length > 0) {

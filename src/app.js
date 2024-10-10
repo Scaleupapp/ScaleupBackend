@@ -8,6 +8,10 @@ const jwt = require("jsonwebtoken");
 const cors = require("cors");
 const Sentry = require("@sentry/node");
 const multer = require("multer");
+const { ExpressAdapter } = require('@bull-board/express');
+const { BullAdapter } = require('@bull-board/api/bullAdapter');
+const { createBullBoard } = require('@bull-board/api');
+const activityQueue = require('./utils/activityQueue');
 
 const userRoute = require("./routes/userRoute");
 const authRoute = require("./routes/authRoute");
@@ -33,14 +37,6 @@ const io = socketIo(server, {
     credentials: true
   },
 });
-/*
-const io = socketIo(server, {
-  cors: {
-    origin: "*", // Allow any origin for simplicity. Restrict as needed.
-    methods: ["GET", "POST"],
-  },
-});
-*/
 
 const PORT = process.env.PORT || 3000;
 const mongodbUri = process.env.MONGODB_URI;
@@ -67,12 +63,8 @@ Sentry.init({
 // Pass the Socket.IO instance to the quiz controller
 quizController.setSocketIo(io);
 
-
 // Middleware setup
 app.use(bodyParser.json());
-/*
-app.use(cors());
-*/
 app.use(cors({
   origin: 'https://main.d3dx884pkm8jl7.amplifyapp.com', // Restrict to your Amplify domain
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -108,21 +100,6 @@ io.on("connection", (socket) => {
     console.log(`User joined quiz room: quiz_${quizId}`);
   });
 
-  /*
-  // Notify everyone in the quiz room when the quiz starts
-  socket.on("quizStarted", ({ quizId }) => {
-    io.to(`quiz_${quizId}`).emit("quizStarted", { quizId });
-    console.log(`Quiz started for quiz room: quiz_${quizId}`);
-  });
-
-  // Listen for quiz start event
-  socket.on('startQuiz', ({ quizId }) => {
-    const startTime = new Date(); // Get the current start time or set a future start time
-    io.to(`quiz_${quizId}`).emit('quizStarted', { quizId, startTime }); // Notify all users in this quiz room
-    console.log(`Quiz started for quiz room: quiz_${quizId}, Start time: ${startTime}`);
-  });
-
-  */
   socket.on("disconnect", () => {
     console.log("Client disconnected for Quiz");
   });
@@ -179,156 +156,47 @@ io.on("connection", (socket) => {
 
   // Handle sending messages (for both one-to-one and group chats)
   socket.on("sendMessage", async (data) => {
-    const { conversationId, groupId, message, token } = data;
-    const decoded = jwt.verify(token, jwtSecret);
-    const sender = decoded.userId;
+    try {
+      const { conversationId, groupId, message, token } = data;
+      const decoded = jwt.verify(token, jwtSecret);
+      const sender = decoded.userId;
 
-    if (conversationId) {
-      // Handle one-to-one chat message
-      io.to(conversationId).emit("receiveMessage", {
-        conversationId,
-        message,
-        sender,
-      });
+      if (conversationId) {
+        // Handle one-to-one chat message
+        io.to(conversationId).emit("receiveMessage", {
+          conversationId,
+          message,
+          sender,
+        });
 
-      // Save the message in the database
-      const newMessage = new chatController.Message({
-        conversationId,
-        sender,
-        content: message,
-      });
-
-      await newMessage.save().catch((error) =>
-        console.error("Error saving message:", error)
-      );
-    } else if (groupId) {
-      // Handle group chat message
-      io.to(groupId).emit("receiveMessage", {
-        groupId,
-        message,
-        sender,
-      });
-
-      // Save the message in the group collection
-      const group = await studyGroupController.StudyGroup.findById(groupId);
-      if (group) {
-        group.messages.push({
+        // Save the message in the database
+        const newMessage = new chatController.Message({
+          conversationId,
           sender,
           content: message,
         });
-        await group.save().catch((error) =>
-          console.error("Error saving group message:", error)
-        );
-      }
-    }
-  });
 
-  // Handle adding a reaction to a message
-  socket.on("addReaction", async (data) => {
-    const { conversationId, groupId, messageId, emoji, token } = data;
-    const decoded = jwt.verify(token, jwtSecret);
-    const userId = decoded.userId;
-
-    if (conversationId) {
-      const result = await chatController.addReaction({
-        conversationId,
-        messageId,
-        emoji,
-        userId,
-      });
-
-      if (result.success) {
-        io.to(conversationId).emit("reactionAdded", {
-          messageId,
-          emoji,
-          userId,
+        await newMessage.save();
+      } else if (groupId) {
+        // Handle group chat message
+        io.to(groupId).emit("receiveMessage", {
+          groupId,
+          message,
+          sender,
         });
+
+        // Save the message in the group collection
+        const group = await studyGroupController.StudyGroup.findById(groupId);
+        if (group) {
+          group.messages.push({
+            sender,
+            content: message,
+          });
+          await group.save();
+        }
       }
-    } else if (groupId) {
-      const result = await studyGroupController.addReaction({
-        groupId,
-        messageId,
-        emoji,
-        userId,
-      });
-
-      if (result.success) {
-        io.to(groupId).emit("reactionAdded", {
-          messageId,
-          emoji,
-          userId,
-        });
-      }
-    }
-  });
-
-  // Handle editing a message (for both one-to-one and group chats)
-  socket.on("editMessage", async (data) => {
-    const { conversationId, groupId, messageId, newContent, token } = data;
-    const decoded = jwt.verify(token, jwtSecret);
-    const userId = decoded.userId;
-
-    if (conversationId) {
-      const result = await chatController.editMessage({
-        conversationId,
-        messageId,
-        newContent,
-        userId,
-      });
-
-      if (result.success) {
-        io.to(conversationId).emit("messageEdited", {
-          messageId,
-          newContent,
-        });
-      }
-    } else if (groupId) {
-      const result = await studyGroupController.editGroupMessage({
-        groupId,
-        messageId,
-        newContent,
-        userId,
-      });
-
-      if (result.success) {
-        io.to(groupId).emit("messageEdited", {
-          messageId,
-          newContent,
-        });
-      }
-    }
-  });
-
-  // Handle deleting a message (for both one-to-one and group chats)
-  socket.on("deleteMessage", async (data) => {
-    const { conversationId, groupId, messageId, token } = data;
-    const decoded = jwt.verify(token, jwtSecret);
-    const userId = decoded.userId;
-
-    if (conversationId) {
-      const result = await chatController.deleteMessage({
-        conversationId,
-        messageId,
-        userId,
-      });
-
-      if (result.success) {
-        io.to(conversationId).emit("messageDeleted", {
-          messageId,
-        });
-      }
-    } else if (groupId) {
-      const result = await studyGroupController.deleteGroupMessage({
-        groupId,
-        messageId,
-        userId,
-      });
-
-      if (result.success) {
-        io.to(groupId).emit("messageDeleted", {
-          messageId,
-        });
-      }
+    } catch (error) {
+      console.error("Error handling sendMessage:", error);
     }
   });
 
@@ -340,6 +208,15 @@ io.on("connection", (socket) => {
 // Expose the Socket.IO instance to controllers
 chatController.setSocketIo(io);
 studyGroupController.setSocketIo(io);
+
+// Bull Board setup for monitoring queues
+const serverAdapter = new ExpressAdapter();
+createBullBoard({
+  queues: [new BullAdapter(activityQueue)],
+  serverAdapter: serverAdapter,
+});
+serverAdapter.setBasePath('/admin/queues');
+app.use('/admin/queues', serverAdapter.getRouter());
 
 // Error handling
 app.use((err, req, res, next) => {
