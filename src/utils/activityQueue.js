@@ -14,7 +14,7 @@ activityQueue.process(async (job) => {
   const { userId, activityType, activityDescription } = job.data;
 
   try {
-    console.log(`Processing activity log for user ${userId}: ${activityType}`);
+   // console.log(`Processing activity log for user ${userId}: ${activityType}`);
     const user = await User.findById(userId).select('username profilePicture');
     if (!user) {
       throw new Error(`User with ID ${userId} not found`);
@@ -58,7 +58,7 @@ activityQueue.process(async (job) => {
 
     // Save updated activity log
     await activityLog.save();
-    console.log(`Successfully logged activity for user ${userId}: ${activityType}`);
+   // console.log(`Successfully logged activity for user ${userId}: ${activityType}`);
   } catch (error) {
     console.error('Error processing activity log:', error);
   }
