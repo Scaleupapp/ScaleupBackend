@@ -26,9 +26,11 @@ const quizController = require("./controllers/quizController");
 const webinarRoutes = require("./routes/webinarRoutes");
 
 require("dotenv").config();
+require("./config/passport-config");
 
 const app = express();
 const server = http.createServer(app);
+
 const io = socketIo(server, {
   cors: {
     origin: 'https://main.d3dx884pkm8jl7.amplifyapp.com', // Restrict CORS to your Amplify domain

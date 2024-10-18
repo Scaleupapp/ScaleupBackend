@@ -11,6 +11,7 @@ const router = express.Router();
 const nodemailer = require("nodemailer");
 const Sentry = require("@sentry/node");
 const logActivity = require('../utils/activityLogger');
+const ChatBase = require("twilio/lib/rest/ChatBase");
 //const Streak = require('../models/streakModel');
 
 require("dotenv").config();
@@ -22,6 +23,103 @@ const gmail = process.env.GMAIL_EMAIL;
 const gmailpassword = process.env.GMAIL_PASSWORD;
 
 const twilioClient = twilio(twilioAccountSid, twilioAuthToken);
+
+const login1 = async (req, res) => {
+  try {
+    const user = req.user;
+    // User is authenticated, log the activity
+    await logActivity(user._id, 'login', 'User logged in');
+
+    // Create a JWT token for session management
+    const token = jwt.sign({ userId: user._id }, jwtSecret, {
+      expiresIn: '7200h',
+    });
+
+    // Update the user's device token
+    // req.user.devicetoken = devicetoken;
+
+    // Handle first-time login logic
+    const isFirstTimeLogin1 = user.isFirstTimeLogin;
+    const isTestUser = user.isTestUser;
+
+    if (user.isFirstTimeLogin) {
+      user.isFirstTimeLogin = false;
+    }
+
+    // Handle streak logic
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Set time to start of the day
+
+    let streakLabel = 'No streak';
+
+    if (user.lastLoginDate) {
+      const lastLoginDate = new Date(user.lastLoginDate);
+      lastLoginDate.setHours(0, 0, 0, 0);
+
+      const dayDifference = (today - lastLoginDate) / (1000 * 60 * 60 * 24);
+
+      if (dayDifference === 1) {
+        // User logged in on consecutive days
+        user.streakCount += 1;
+      } else if (dayDifference > 1) {
+        // User missed a day or more, reset the streak
+        user.streakCount = 1;
+      }
+    } else {
+      // First login ever, start the streak
+      user.streakCount = 1;
+    }
+
+    // Determine streak label
+    if (user.streakCount >= 365) {
+      streakLabel = '1 year streak';
+    } else if (user.streakCount >= 180) {
+      streakLabel = '6 months streak';
+    } else if (user.streakCount >= 90) {
+      streakLabel = '1 quarter streak';
+    } else if (user.streakCount >= 30) {
+      streakLabel = '1 month streak';
+    } else if (user.streakCount >= 21) {
+      streakLabel = '3 weeks streak';
+    } else if (user.streakCount >= 14) {
+      streakLabel = '2 weeks streak';
+    } else if (user.streakCount >= 7) {
+      streakLabel = '1 week streak'; 
+    }else if (user.streakCount = 1) {
+      streakLabel = '1 day streak'; 
+    }
+
+    // Update last login date and streak label
+    user.lastLoginDate = today;
+    user.streakLabel = streakLabel;
+
+    // Save user data
+    await user.save();
+
+    // Prepare the response data
+    const responseData = {
+      message: "Login successful",
+      token,
+      isFirstTimeLogin: isFirstTimeLogin1,
+      id: user._id,
+      isTestUser,
+      badges: user.badges, // Returning the array of badges
+      role: user.role,
+      username: user.username,
+      email: user.email,
+      profilePicture: user.profilePicture,
+      streakCount: user.streakCount, // Include streak count in response
+      streakLabel: user.streakLabel, // Include streak label in response
+    };
+
+    // Return the success message with the user details and token
+    res.json(responseData);
+  
+  } catch (error) {
+    console.error("Error during authentication:", error);
+    res.status(500).json({ message: "Something went wrong." });
+  }
+}
 
 const login = async (req, res) => {
   const { loginIdentifier, password, devicetoken } = req.body;
@@ -152,6 +250,64 @@ const login = async (req, res) => {
   }
 };
 
+const register1 = async (accessToken, refreshToken, profile, done) => {
+  // console.log(profile);
+  // Extract user registration data from the request body
+  const firstName = profile.displayName.split(' ')[0];
+  const lastName = profile.displayName.split(' ')[1];
+  console.log(profile.emails + " msg ");
+  const email = profile.emails != undefined ? profile.emails[0].value : firstName.toLowerCase() + "sample@mail.com";
+  const picURI = profile.emails ? profile.photos[0].value : null;
+
+  const normalizedUsername = firstName.toLowerCase() + profile.provider + profile.id.substring(0, 2);
+  const password = firstName.toLowerCase() + profile.id.substring(0, 5);
+
+  // Check if the user already exists with the normalized email or username
+  const existingUser = await User.findOne({
+    $or: [{ email: email }, { username: normalizedUsername }]
+  });
+  
+  if (existingUser) {
+    console.log("existing user retreived");
+    return done(null, existingUser);
+  }
+
+  // ask user to reset password is password not present in db
+  // Hash the user's password before saving it in the database
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  const newUser = new User({
+    username : normalizedUsername,
+    password : hashedPassword,
+    email: email,
+    firstname: firstName,
+    lastname: lastName,
+    profilePicture : picURI
+  });
+
+  // Save the new user to the database
+  await newUser.save();
+
+  // Create user settings for the new user
+  const newuserSettings = new UserSettings({ userId: newUser._id });
+  await newuserSettings.save();
+
+  // Automatically follow the admin user using admin's userID
+  const adminUser = await User.findById('6666829e3c71111d41f0d19a'); // Use the provided userID
+  if (adminUser) {
+    newUser.following.push(adminUser.username);
+    newUser.followingCount += 1;
+    await newUser.save();
+
+    adminUser.followers.push(newUser.username);
+    adminUser.followersCount += 1;
+    await adminUser.save();
+  }
+
+  // Return a success message
+  console.log("new user saved");
+  return done(null, newUser);
+}
 
 const register = async (req, res) => {
   // Extract user registration data from the request body
@@ -497,7 +653,9 @@ const testSentry = (req, res) => {
 
 module.exports = {
   login,
+  login1,
   register,
+  register1,
   signout,
   loginWithOTP,
   verifyOTP,
